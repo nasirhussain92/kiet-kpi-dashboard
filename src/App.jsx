@@ -6,14 +6,14 @@ const BLUE = "#003087";
 const GREEN = "#1A6B3C";
 
 const POSITIONS = [
-  { id:"vc",          title:"Vice Chancellor",           short:"VC",          person:"Prof. Dr. Muhammad Khalid Khan",                        campus:"Both",    cat:"Senior",   kpis:64, areas:["Academics","Governance","Research & Development","Community Services","Financial Status","Diversity & Inclusion","Graduate Employability","Co-Curricular Activities","Sustainability","Automation Initiatives"] },
-  { id:"df",          title:"Director Finance",          short:"DF",          person:"Mr. Ahsan Manzoor",                        campus:"Both",    cat:"Senior",   kpis:54, areas:["Financial Governance & Sustainability","Financial Management","Technology Integration","Expenditure Financial Discipline"] },
+  { id:"vc",          title:"Vice Chancellor",           short:"VC",          person:"",                        campus:"Both",    cat:"Senior",   kpis:64, areas:["Academics","Governance","Research & Development","Community Services","Financial Status","Diversity & Inclusion","Graduate Employability","Co-Curricular Activities","Sustainability","Automation Initiatives"] },
+  { id:"df",          title:"Director Finance",          short:"DF",          person:"",                        campus:"Both",    cat:"Senior",   kpis:54, areas:["Financial Governance & Sustainability","Financial Management","Technology Integration","Expenditure Financial Discipline"] },
   { id:"qec",         title:"Director QEC",              short:"QEC",         person:"Prof. Dr. Sajida Parveen",campus:"SF",      cat:"Director", kpis:27, areas:["Status of QEC Office","Functions of QEC","International Ranking","Technology Integration"] },
-  { id:"oric",        title:"Director ORIC",             short:"ORIC",        person:"Mr. Mubashar Yousuf",                        campus:"NN",      cat:"Director", kpis:30, areas:["Research Support","IP Management","Industry Engagement","Recognition & Awards","Operations & HR","ORIC Steering Committee","Entrepreneurship & Innovation"] },
-  { id:"coe",         title:"Controller of Examinations",short:"CoE",         person:"Mr. Shehzad Khan",                        campus:"Both",    cat:"Director", kpis:28, areas:["General Administration","Examination Management","Technology Integration"] },
+  { id:"oric",        title:"Director ORIC",             short:"ORIC",        person:"",                        campus:"NN",      cat:"Director", kpis:30, areas:["Research Support","IP Management","Industry Engagement","Recognition & Awards","Operations & HR","ORIC Steering Committee","Entrepreneurship & Innovation"] },
+  { id:"coe",         title:"Controller of Examinations",short:"CoE",         person:"",                        campus:"Both",    cat:"Director", kpis:28, areas:["General Administration","Examination Management","Technology Integration"] },
   { id:"reg",         title:"Registrar (Acting)",        short:"Reg",         person:"Prof. Dr. Tariq Jalees",  campus:"Both",    cat:"Director", kpis:32, note:"Also shortlisted for Registrar position",areas:["Administration & Coordination","Admission & Enrollment","Faculty Support","Financial Coordination","Equity & Inclusivity","Discipline & Inquiries","Campus Management & Safety","Transparency & Accountability","Technology Integration"] },
-  { id:"dean_cocis",  title:"Dean CoCIS",                short:"Dean CoCIS",  person:"Prof. Dr. Salman Ahmed Khan",                        campus:"NN",      cat:"Dean",     kpis:36, accr:"NCEAC/PEC", areas:["Academics","Governance","Research & Development","Community Services","Co-Curricular Activities","Accreditation & QA","Diversity & Inclusion","Graduate Employability","Technology Integration"] },
-  { id:"dean_fms",    title:"Dean FMS",                  short:"Dean FMS",    person:"Prof. Dr. Tariq Jalees",                        campus:"NN+SF",   cat:"Dean",     kpis:36, accr:"NBEAC",    areas:["Academics","Governance","Research & Development","Community Services","Co-Curricular Activities","Accreditation & QA","Diversity & Inclusion","Graduate Employability","Technology Integration"] },
+  { id:"dean_cocis",  title:"Dean CoCIS",                short:"Dean CoCIS",  person:"",                        campus:"NN",      cat:"Dean",     kpis:36, accr:"NCEAC/PEC", areas:["Academics","Governance","Research & Development","Community Services","Co-Curricular Activities","Accreditation & QA","Diversity & Inclusion","Graduate Employability","Technology Integration"] },
+  { id:"dean_fms",    title:"Dean FMS",                  short:"Dean FMS",    person:"",                        campus:"NN+SF",   cat:"Dean",     kpis:36, accr:"NBEAC",    areas:["Academics","Governance","Research & Development","Community Services","Co-Curricular Activities","Accreditation & QA","Diversity & Inclusion","Graduate Employability","Technology Integration"] },
   { id:"hod_ms_nn",   title:"HoD Management Sciences",   short:"HoD MS (NN)", person:"",                        campus:"NN",      cat:"HoD",      kpis:33, accr:"NBEAC",    areas:["Academics & Administration","Research & Development","Community Services","Co-Curricular Activities","Diversity & Inclusion","Facilities & Infrastructure","Accreditation & QA","Technology Integration"] },
   { id:"hod_ms_sf",   title:"HoD Management Sciences",   short:"HoD MS (SF)", person:"",                        campus:"SF",      cat:"HoD",      kpis:33, accr:"NBEAC",    areas:["Academics & Administration","Research & Development","Community Services","Co-Curricular Activities","Diversity & Inclusion","Facilities & Infrastructure","Accreditation & QA","Technology Integration"] },
   { id:"hod_cybersec",title:"HoD Cyber Security",        short:"HoD CyberSec",person:"Prof. Dr. Maaz Bin Ahmed",campus:"NN",      cat:"HoD",      kpis:33, accr:"NCEAC",    dual:true, areas:["Academics & Administration","Research & Development","Community Services","Co-Curricular Activities","Diversity & Inclusion","Facilities & Infrastructure","Accreditation & QA","Technology Integration"] },
@@ -271,4 +271,166 @@ export default function App() {
                     ))}
                   </tr>
                 </thead>
-            
+                <tbody>
+                  {POSITIONS.map(p=>{
+                    const d=data[p.id]; const st=S[d.status]||S.not_sent; const pct=avg(d.areas); const tc=tlC(pct);
+                    return (
+                      <tr key={p.id} onClick={()=>{setSel(p.id);setTab("tracker");}} style={{borderBottom:"1px solid #F9FAFB",cursor:"pointer"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                        <td style={{padding:"8px 10px",fontWeight:600,color:"#1F2937",whiteSpace:"nowrap"}}>{p.title}</td>
+                        <td style={{padding:"8px 10px",color:"#6B7280"}}>{d.personName||<span style={{color:"#D1D5DB",fontStyle:"italic"}}>—</span>}</td>
+                        <td style={{padding:"8px 10px",color:"#9CA3AF",fontSize:11}}>{p.campus}</td>
+                        <td style={{padding:"8px 10px",color:"#6B7280"}}>{p.kpis}</td>
+                        <td style={{padding:"8px 10px"}}><span style={{background:st.bg,color:st.color,padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>{st.label}</span></td>
+                        <td style={{padding:"8px 10px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <div style={{height:4,width:60,background:"#F3F4F6",borderRadius:99}}><div style={{height:"100%",width:`${pct}%`,background:tc,borderRadius:99}}/></div>
+                            <span style={{color:tc,fontWeight:700,fontSize:11}}>{pct}%</span>
+                          </div>
+                        </td>
+                        <td style={{padding:"8px 10px",color:"#9CA3AF",fontSize:11}}>{d.deadline||"—"}</td>
+                        <td style={{padding:"8px 10px",color:"#059669",fontSize:11,fontWeight:d.receivedDate?600:400}}>{d.receivedDate||"—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL */}
+      {sel && <EditModal pos={POSITIONS.find(p=>p.id===sel)} d={data[sel]} onSave={upd} onClose={()=>setSel(null)}/>}
+    </div>
+  );
+}
+
+function EditModal({ pos, d, onSave, onClose }) {
+  const [t, setT] = useState("sub");
+  const [loc, setLoc] = useState(() => JSON.parse(JSON.stringify(d)));
+  const [flash, setFlash] = useState(false);
+
+  const save = () => { onSave(pos.id, () => loc); setFlash(true); setTimeout(()=>setFlash(false),2000); };
+  const updS = (k,v) => setLoc(p=>({...p,[k]:v}));
+  const updA = (a,k,v) => setLoc(p=>({...p,areas:{...p.areas,[a]:{...p.areas[a],[k]:v}}}));
+  const pct = avg(loc.areas);
+  const tc = tlC(pct);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 16px",overflowY:"auto"}}>
+      <div style={{background:"white",borderRadius:20,width:"100%",maxWidth:640,boxShadow:"0 25px 50px rgba(0,0,0,0.25)",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{background:BLUE,padding:"18px 22px",color:"white"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:17}}>{pos.title}</div>
+              <div style={{color:"#93C5FD",fontSize:11,marginTop:3,display:"flex",gap:14,flexWrap:"wrap"}}>
+                <span>{pos.campus}</span><span>{pos.kpis} KPIs · {pos.areas.length} Areas</span>
+                {pos.accr && <span>{pos.accr}</span>}
+              </div>
+              {pos.dual && <div style={{marginTop:6,background:"rgba(124,58,237,0.4)",display:"inline-block",padding:"2px 10px",borderRadius:20,fontSize:10}}>⚠ Dual Role — fill 2 proformas separately</div>}
+              {pos.note && <div style={{marginTop:6,background:"rgba(245,158,11,0.3)",display:"inline-block",padding:"2px 10px",borderRadius:20,fontSize:10}}>📌 {pos.note}</div>}
+            </div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:"#93C5FD",fontSize:24,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+          </div>
+          {/* Progress */}
+          <div style={{marginTop:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:11,color:"#BFDBFE"}}>KPI Area Completion</span>
+              <span style={{fontSize:12,fontWeight:700,color:pct>=80?"#6EE7B7":pct>=40?"#FCD34D":"#FCA5A5"}}>{pct}%</span>
+            </div>
+            <div style={{height:6,background:"rgba(255,255,255,0.2)",borderRadius:99}}>
+              <div style={{height:"100%",width:`${pct}%`,background:pct>=80?"#6EE7B7":pct>=40?"#FCD34D":"#FCA5A5",borderRadius:99,transition:"width 0.4s"}}/>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",gap:0,borderBottom:"2px solid #F3F4F6",background:"#FAFAFA"}}>
+          {[["sub","📬 Submission"],["areas","📊 KPI Areas"],["notes","📝 Notes"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setT(id)} style={{padding:"10px 18px",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:"none",color:t===id?BLUE:"#9CA3AF",borderBottom:`2px solid ${t===id?BLUE:"transparent"}`,transition:"all 0.15s",marginBottom:-2}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{padding:"20px 22px",maxHeight:380,overflowY:"auto"}}>
+          {t === "sub" && (
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:"#6B7280",display:"block",marginBottom:4}}>Person / Position Holder</label>
+                <input value={loc.personName} onChange={e=>updS("personName",e.target.value)} placeholder="Full name..."
+                  style={{width:"100%",border:"1px solid #E5E7EB",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                {[["sentDate","Date Sent","date"],["deadline","Deadline","date"],["receivedDate","Date Received","date"]].map(([k,lbl,type])=>(
+                  <div key={k}>
+                    <label style={{fontSize:11,fontWeight:600,color:"#6B7280",display:"block",marginBottom:4}}>{lbl}</label>
+                    <input type={type} value={loc[k]} onChange={e=>updS(k,e.target.value)}
+                      style={{width:"100%",border:"1px solid #E5E7EB",borderRadius:8,padding:"7px 10px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:"#6B7280",display:"block",marginBottom:8}}>Submission Status</label>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                  {Object.entries(S).map(([val,cfg])=>(
+                    <button key={val} onClick={()=>updS("status",val)}
+                      style={{padding:"8px 6px",borderRadius:10,border:"2px solid",fontSize:11,fontWeight:600,cursor:"pointer",transition:"all 0.15s",borderColor:loc.status===val?cfg.color:"#E5E7EB",background:loc.status===val?cfg.color:"white",color:loc.status===val?"white":cfg.color}}>
+                      {cfg.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {t === "areas" && (
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <p style={{fontSize:11,color:"#9CA3AF",margin:"0 0 4px"}}>Drag the slider or enter a % for each area (0 = not started · 100 = all KPIs filled & complete).</p>
+              {pos.areas.map(area=>{
+                const a = loc.areas[area] || {pct:0,notes:""};
+                const atc = tlC(a.pct);
+                return (
+                  <div key={area} style={{border:"1px solid #F3F4F6",borderRadius:12,padding:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontSize:12,fontWeight:600,color:"#374151"}}>{area}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:atc}}>{a.pct}%</span>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                      <input type="range" min={0} max={100} step={5} value={a.pct} onChange={e=>updA(area,"pct",+e.target.value)}
+                        style={{flex:1,accentColor:atc}}/>
+                      <input type="number" min={0} max={100} value={a.pct} onChange={e=>updA(area,"pct",Math.min(100,Math.max(0,+e.target.value)))}
+                        style={{width:52,border:"1px solid #E5E7EB",borderRadius:6,padding:"3px 6px",fontSize:12,textAlign:"center",outline:"none"}}/>
+                    </div>
+                    <input value={a.notes} onChange={e=>updA(area,"notes",e.target.value)} placeholder="Area notes..."
+                      style={{width:"100%",border:"1px solid #F3F4F6",borderRadius:6,padding:"4px 8px",fontSize:11,color:"#6B7280",outline:"none",boxSizing:"border-box"}}/>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {t === "notes" && (
+            <div>
+              <label style={{fontSize:11,fontWeight:600,color:"#6B7280",display:"block",marginBottom:6}}>Follow-up Notes / Observations</label>
+              <textarea value={loc.notes} onChange={e=>updS("notes",e.target.value)} rows={9}
+                placeholder="Any follow-up needed, issues raised, special instructions..."
+                style={{width:"100%",border:"1px solid #E5E7EB",borderRadius:10,padding:"10px 12px",fontSize:13,outline:"none",resize:"none",boxSizing:"border-box",color:"#374151"}}/>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"14px 22px",borderTop:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#FAFAFA"}}>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#9CA3AF",fontSize:13,cursor:"pointer",fontWeight:500}}>Cancel</button>
+          <button onClick={save} style={{background:flash?"#059669":BLUE,color:"white",border:"none",borderRadius:10,padding:"9px 24px",fontSize:13,fontWeight:700,cursor:"pointer",transition:"background 0.3s"}}>
+            {flash?"✓ Saved!":"Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
