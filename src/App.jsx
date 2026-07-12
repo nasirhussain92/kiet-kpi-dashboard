@@ -79,7 +79,10 @@ function AuthScreen() {
         if (error) throw error;
       }
     } catch (e2) {
-      setErr(e2.message);
+      console.error("Auth error:", e2);
+      const msg = (e2 && (e2.message || e2.error_description || e2.msg)) ||
+        "Something went wrong. Please try again, or contact the Registrar Office if it persists.";
+      setErr(msg);
     } finally {
       setBusy(false);
     }
@@ -388,6 +391,11 @@ function AdminUsers() {
   const [form, setForm] = useState({ userId: "", positionId: "", campusCode: "" });
   const [msg, setMsg] = useState("");
 
+  const [posForm, setPosForm] = useState({ name: "", category: "Senior" });
+  const [posMsg, setPosMsg] = useState("");
+  const [campForm, setCampForm] = useState({ code: "", name: "" });
+  const [campMsg, setCampMsg] = useState("");
+
   const loadAll = async () => {
     const [{ data: p }, { data: pos }, { data: camp }, { data: asn }] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
@@ -414,10 +422,58 @@ function AdminUsers() {
     loadAll();
   };
 
+  const addPosition = async () => {
+    if (!posForm.name.trim()) { setPosMsg("Enter a position name."); return; }
+    const { error } = await supabase.from("positions").insert({ name: posForm.name.trim(), category: posForm.category });
+    setPosMsg(error ? error.message : "Position added.");
+    if (!error) { loadAll(); setPosForm({ name: "", category: "Senior" }); }
+  };
+
+  const addCampus = async () => {
+    if (!campForm.code.trim() || !campForm.name.trim()) { setCampMsg("Enter both a code and a name."); return; }
+    const { error } = await supabase.from("campuses").insert({ code: campForm.code.trim().toUpperCase(), name: campForm.name.trim() });
+    setCampMsg(error ? error.message : "Campus added.");
+    if (!error) { loadAll(); setCampForm({ code: "", name: "" }); }
+  };
+
   if (profiles === null) return <Loading />;
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 24px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>Add a Position</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input value={posForm.name} onChange={e => setPosForm(f => ({ ...f, name: e.target.value }))} placeholder="Position name (e.g. HoD Data Science)"
+              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" }} />
+            <select value={posForm.category} onChange={e => setPosForm(f => ({ ...f, category: e.target.value }))}
+              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12 }}>
+              {["Senior", "Dean", "Director", "HoD"].map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={addPosition} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add Position</button>
+            {posMsg && <div style={{ fontSize: 11, color: "#6B7280" }}>{posMsg}</div>}
+          </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: "#9CA3AF" }}>
+            Current: {positions.map(p => p.name).join(", ") || "none"}
+          </div>
+        </div>
+
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>Add a Campus</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input value={campForm.code} onChange={e => setCampForm(f => ({ ...f, code: e.target.value }))} placeholder="Code (e.g. EC)"
+              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" }} />
+            <input value={campForm.name} onChange={e => setCampForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name (e.g. Education City)"
+              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" }} />
+            <button onClick={addCampus} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add Campus</button>
+            {campMsg && <div style={{ fontSize: 11, color: "#6B7280" }}>{campMsg}</div>}
+          </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: "#9CA3AF" }}>
+            Current: {campuses.map(c => `${c.name} (${c.code})`).join(", ") || "none"}
+          </div>
+        </div>
+      </div>
+
       <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
         <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>Add a Position Assignment</div>
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>The person must have signed up at least once before they appear in this list.</div>
