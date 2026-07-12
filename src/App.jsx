@@ -121,10 +121,13 @@ function AuthScreen() {
 
 function TopBar({ title, subtitle, onLogout, tabs, tab, setTab }) {
   return (
-    <div style={{ background: BLUE, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-      <div>
-        <div style={{ color: "white", fontWeight: 700, fontSize: 18 }}>{title}</div>
-        <div style={{ color: "#93C5FD", fontSize: 11, marginTop: 3 }}>{subtitle}</div>
+    <div style={{ background: BLUE, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 40, borderRadius: 4, background: "white", padding: 2 }} />
+        <div>
+          <div style={{ color: "white", fontWeight: 700, fontSize: 18 }}>{title}</div>
+          <div style={{ color: "#93C5FD", fontSize: 11, marginTop: 3 }}>{subtitle}</div>
+        </div>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {tabs && tabs.map(t => (
