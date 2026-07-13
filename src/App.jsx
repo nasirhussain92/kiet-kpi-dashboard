@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
 import { supabase } from "./lib/supabaseClient";
 
 const BLUE = "#003087";
@@ -372,6 +373,7 @@ function AdminApp({ profile }) {
 function AdminTracker() {
   const [rows, setRows] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [view, setView] = useState("cards"); // cards | analytics
 
   const load = async () => {
     const { data } = await supabase
@@ -387,6 +389,14 @@ function AdminTracker() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 60px" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["cards", "📋 Cards"], ["analytics", "📊 Analytics"]].map(([id, lbl]) => (
+          <button key={id} onClick={() => setView(id)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid " + (view === id ? BLUE : "#E5E7EB"), cursor: "pointer", fontSize: 12, fontWeight: 600, background: view === id ? BLUE : "white", color: view === id ? "white" : "#6B7280" }}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+      {view === "analytics" ? <AdminAnalytics rows={rows} onSelectAssignment={setEditing} /> : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
         {rows.map(a => (
           <div key={a.id} onClick={() => setEditing(a)} style={{ background: "white", borderRadius: 14, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", cursor: "pointer" }}>
@@ -397,6 +407,7 @@ function AdminTracker() {
         ))}
         {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13 }}>No assignments created yet — go to "Users &amp; Assignments" to add one.</div>}
       </div>
+      )}
       {editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
           <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
@@ -411,6 +422,159 @@ function AdminTracker() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ================= ANALYTICS ================= */
+
+function AdminAnalytics({ rows, onSelectAssignment }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: areas }, { data: kpis }, { data: entries }] = await Promise.all([
+        supabase.from("kpi_areas").select("id, position_id"),
+        supabase.from("kpis").select("id, area_id"),
+        supabase.from("kpi_entries").select("assignment_id, status"),
+      ]);
+
+      const areaToPosition = {};
+      (areas || []).forEach(a => { areaToPosition[a.id] = a.position_id; });
+
+      const kpiCountByPosition = {};
+      (kpis || []).forEach(k => {
+        const posId = areaToPosition[k.area_id];
+        if (posId) kpiCountByPosition[posId] = (kpiCountByPosition[posId] || 0) + 1;
+      });
+
+      const entriesByAssignment = {};
+      (entries || []).forEach(e => {
+        if (!entriesByAssignment[e.assignment_id]) entriesByAssignment[e.assignment_id] = [];
+        entriesByAssignment[e.assignment_id].push(e.status);
+      });
+
+      const statusTotals = { green: 0, amber: 0, red: 0, na: 0 };
+      const perAssignment = rows.map(a => {
+        const total = kpiCountByPosition[a.position.id] || 0;
+        const statuses = entriesByAssignment[a.id] || [];
+        let green = 0, amber = 0, red = 0;
+        statuses.forEach(s => {
+          if (s === "green") green++;
+          else if (s === "amber") amber++;
+          else if (s === "red") red++;
+        });
+        const filled = green + amber + red;
+        const na = Math.max(total - filled, 0);
+        statusTotals.green += green; statusTotals.amber += amber; statusTotals.red += red; statusTotals.na += na;
+        const pct = total ? Math.round((filled / total) * 100) : 0;
+        return { assignment: a, total, filled, pct };
+      });
+
+      setData({ perAssignment, statusTotals });
+    })();
+  }, [rows]);
+
+  if (!data) return <Loading />;
+
+  const { perAssignment, statusTotals } = data;
+  const pieData = [
+    { name: "Green", value: statusTotals.green, color: "#059669" },
+    { name: "Amber", value: statusTotals.amber, color: "#D97706" },
+    { name: "Red", value: statusTotals.red, color: "#DC2626" },
+    { name: "Not Started", value: statusTotals.na, color: "#9CA3AF" },
+  ].filter(d => d.value > 0);
+
+  const overallPct = perAssignment.length
+    ? Math.round(perAssignment.reduce((s, p) => s + p.pct, 0) / perAssignment.length) : 0;
+  const complete = perAssignment.filter(p => p.pct === 100).length;
+  const notStarted = perAssignment.filter(p => p.pct === 0).length;
+  const tc = (pct) => pct >= 80 ? "#059669" : pct >= 40 ? "#D97706" : "#DC2626";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12 }}>
+        {[
+          { label: "Assignments", val: perAssignment.length, color: BLUE },
+          { label: "Avg Completion", val: overallPct + "%", color: tc(overallPct) },
+          { label: "Fully Complete", val: complete, color: "#059669" },
+          { label: "Not Started", val: notStarted, color: "#9CA3AF" },
+        ].map(s => (
+          <div key={s.label} style={{ background: "white", borderLeft: `4px solid ${s.color}`, borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ color: s.color, fontSize: 24, fontWeight: 700 }}>{s.val}</div>
+            <div style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 20 }}>
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 16 }}>KPI Status Distribution</div>
+          {pieData.length === 0 ? <div style={{ color: "#9CA3AF", fontSize: 13 }}>No KPI data entered yet.</div> : (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} dataKey="value">
+                    {pieData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v, n) => [v + " KPIs", n]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 8 }}>
+                {pieData.map(d => (
+                  <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#6B7280" }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 2, background: d.color }} />
+                    {d.name}: {d.value}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 16 }}>Completion % by Assignment</div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={perAssignment.map(p => ({ name: p.assignment.user?.full_name || p.assignment.position.name, pct: p.pct }))} margin={{ bottom: 60 }}>
+              <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" interval={0} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} />
+              <Tooltip formatter={v => [`${v}%`, "Completion"]} />
+              <Bar dataKey="pct" radius={[4, 4, 0, 0]}>
+                {perAssignment.map((p, i) => <Cell key={i} fill={tc(p.pct)} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", overflowX: "auto" }}>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 16 }}>Full Summary</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
+              {["Position", "Person", "Campus", "KPIs", "Filled", "Completion"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {perAssignment.map(p => (
+              <tr key={p.assignment.id} onClick={() => onSelectAssignment(p.assignment)} style={{ borderBottom: "1px solid #F9FAFB", cursor: "pointer" }}>
+                <td style={{ padding: "8px 10px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>{p.assignment.position.name}</td>
+                <td style={{ padding: "8px 10px", color: "#6B7280" }}>{p.assignment.user?.full_name || "—"}</td>
+                <td style={{ padding: "8px 10px", color: "#9CA3AF", fontSize: 11 }}>{p.assignment.campuses?.name || p.assignment.campus_code}</td>
+                <td style={{ padding: "8px 10px", color: "#6B7280" }}>{p.total}</td>
+                <td style={{ padding: "8px 10px", color: "#6B7280" }}>{p.filled}</td>
+                <td style={{ padding: "8px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ height: 4, width: 60, background: "#F3F4F6", borderRadius: 99 }}><div style={{ height: "100%", width: `${p.pct}%`, background: tc(p.pct), borderRadius: 99 }} /></div>
+                    <span style={{ color: tc(p.pct), fontWeight: 700, fontSize: 11 }}>{p.pct}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {perAssignment.length === 0 && <tr><td colSpan={6} style={{ padding: 8, color: "#9CA3AF" }}>No assignments yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -885,7 +1049,10 @@ function AdminMasterData() {
           <tbody>
             {positions.map(p => (
               <tr key={p.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
-                <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>{p.name}</td>
+                <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>
+                  <input defaultValue={p.name} onBlur={e => e.target.value.trim() && e.target.value.trim() !== p.name && updatePositionField(p.id, "name", e.target.value.trim())}
+                    style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12, width: 160 }} />
+                </td>
                 <td style={{ padding: "8px" }}>
                   <select value={p.level_id || ""} onChange={e => updatePositionField(p.id, "level_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
                     <option value="">—</option>
