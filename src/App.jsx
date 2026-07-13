@@ -5,6 +5,10 @@ import { supabase } from "./lib/supabaseClient";
 
 const BLUE = "#003087";
 
+const MD_CARD = { background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
+const MD_INPUT = { width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" };
+const MD_BTN = { background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" };
+
 const S = {
   na:    { label: "Not Started", color: "#6B7280", bg: "#F9FAFB" },
   red:   { label: "Red",         color: "#DC2626", bg: "#FEF2F2" },
@@ -793,6 +797,38 @@ function AdminUsers() {
 
 /* ================= MASTER DATA ================= */
 
+function SimpleList({ title, table, items, newVal, setNewVal, placeholder, editing, setEditing, addSimple, renameSimple }) {
+  return (
+    <div style={MD_CARD}>
+      <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>{title}</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input value={newVal} onChange={e => setNewVal(e.target.value)} placeholder={placeholder} style={MD_INPUT} />
+        <button onClick={() => addSimple(table, { name: newVal.trim() }, () => setNewVal(""))} style={MD_BTN}>Add</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflowY: "auto" }}>
+        {items.map(it => (
+          <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            {editing?.table === table && editing?.key === it.id ? (
+              <>
+                <input value={editing.value} onChange={e => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12 }} />
+                <button onClick={() => renameSimple(table, "id", it.id, "name", editing.value)} style={{ color: "#059669", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Save</button>
+                <button onClick={() => setEditing(null)} style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1, color: "#374151" }}>{it.name}</span>
+                <button onClick={() => setEditing({ table, key: it.id, value: it.name })} style={{ color: BLUE, background: "none", border: "none", cursor: "pointer" }}>Edit</button>
+              </>
+            )}
+          </div>
+        ))}
+        {items.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>none yet</div>}
+      </div>
+    </div>
+  );
+}
+
 function AdminMasterData() {
   const [departments, setDepartments] = useState([]);
   const [levels, setLevels] = useState([]);
@@ -924,47 +960,16 @@ function AdminMasterData() {
 
   if (!loaded) return <Loading />;
 
-  const card = { background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
-  const label = { fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 };
-  const input = { width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" };
-  const smallBtn = { background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" };
-
-  const SimpleList = ({ title, table, items, newVal, setNewVal, placeholder }) => (
-    <div style={card}>
-      <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>{title}</div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <input value={newVal} onChange={e => setNewVal(e.target.value)} placeholder={placeholder} style={input} />
-        <button onClick={() => addSimple(table, { name: newVal.trim() }, () => setNewVal(""))} style={smallBtn}>Add</button>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflowY: "auto" }}>
-        {items.map(it => (
-          <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            {editing?.table === table && editing?.key === it.id ? (
-              <>
-                <input value={editing.value} onChange={e => setEditing(ed => ({ ...ed, value: e.target.value }))}
-                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12 }} />
-                <button onClick={() => renameSimple(table, "id", it.id, "name", editing.value)} style={{ color: "#059669", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Save</button>
-                <button onClick={() => setEditing(null)} style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>Cancel</button>
-              </>
-            ) : (
-              <>
-                <span style={{ flex: 1, color: "#374151" }}>{it.name}</span>
-                <button onClick={() => setEditing({ table, key: it.id, value: it.name })} style={{ color: BLUE, background: "none", border: "none", cursor: "pointer" }}>Edit</button>
-              </>
-            )}
-          </div>
-        ))}
-        {items.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>none yet</div>}
-      </div>
-    </div>
-  );
+  const card = MD_CARD;
+  const input = MD_INPUT;
+  const smallBtn = MD_BTN;
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "20px 24px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
-        <SimpleList title="Departments" table="departments" items={departments} newVal={newDept} setNewVal={setNewDept} placeholder="e.g. Computer Science" />
-        <SimpleList title="Position Levels" table="position_levels" items={levels} newVal={newLevel} setNewVal={setNewLevel} placeholder="e.g. Deputy Manager" />
-        <SimpleList title="Shifts" table="shifts" items={shifts} newVal={newShift} setNewVal={setNewShift} placeholder="e.g. Morning" />
+        <SimpleList title="Departments" table="departments" items={departments} newVal={newDept} setNewVal={setNewDept} placeholder="e.g. Computer Science" editing={editing} setEditing={setEditing} addSimple={addSimple} renameSimple={renameSimple} />
+        <SimpleList title="Position Levels" table="position_levels" items={levels} newVal={newLevel} setNewVal={setNewLevel} placeholder="e.g. Deputy Manager" editing={editing} setEditing={setEditing} addSimple={addSimple} renameSimple={renameSimple} />
+        <SimpleList title="Shifts" table="shifts" items={shifts} newVal={newShift} setNewVal={setNewShift} placeholder="e.g. Morning" editing={editing} setEditing={setEditing} addSimple={addSimple} renameSimple={renameSimple} />
       </div>
 
       <div style={card}>
