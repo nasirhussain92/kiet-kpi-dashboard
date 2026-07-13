@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import Papa from "papaparse";
 import { supabase } from "./lib/supabaseClient";
 
 const BLUE = "#003087";
@@ -299,12 +300,26 @@ function KpiEntry({ assignment }) {
                   <div style={{ fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 2 }}>{k.kpi_number} — {k.label}</div>
                   {k.lower_is_better && <div style={{ fontSize: 10, color: "#7C3AED", marginBottom: 6 }}>Lower is better</div>}
                   {k.notes && <div style={{ fontSize: 10, color: "#D97706", marginBottom: 6 }}>{k.notes}</div>}
+                  {(k.formula || k.data_source) && (
+                    <div style={{ fontSize: 11, color: "#6B7280", background: "#F9FAFB", borderRadius: 8, padding: "6px 10px", marginBottom: 10, lineHeight: 1.4 }}>
+                      {k.formula && <div><strong style={{ color: "#374151" }}>Formula:</strong> {k.formula}</div>}
+                      {k.data_source && <div><strong style={{ color: "#374151" }}>Data source:</strong> {k.data_source}</div>}
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8, marginBottom: 8 }}>
-                    {[["baseline", "Baseline"], ["yr1_target", "Year 1"], ["yr2_target", "Year 2"], ["yr3_target", "Year 3"], ["benchmark", "Benchmark"], ["actual", "Actual"]].map(([f, lbl]) => (
+                    {[
+                      ["baseline", "Baseline", k.baseline_guidance],
+                      ["yr1_target", "Year 1", k.target_guidance],
+                      ["yr2_target", "Year 2", null],
+                      ["yr3_target", "Year 3", null],
+                      ["benchmark", "Benchmark", k.benchmark_guidance],
+                      ["actual", "Actual", null],
+                    ].map(([f, lbl, guidance]) => (
                       <div key={f}>
                         <label style={{ fontSize: 10, color: "#9CA3AF", display: "block", marginBottom: 2 }}>{lbl}</label>
                         <input defaultValue={e[f] || ""} onBlur={ev => save(k.id, { [f]: ev.target.value })}
                           style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 8px", fontSize: 12, boxSizing: "border-box" }} />
+                        {guidance && <div style={{ fontSize: 9, color: "#9CA3AF", marginTop: 2, lineHeight: 1.3 }}>{guidance}</div>}
                       </div>
                     ))}
                   </div>
@@ -411,6 +426,8 @@ function AdminUsers() {
 
   const [reassigning, setReassigning] = useState(null);
   const [reassignTo, setReassignTo] = useState("");
+  const [editingUser, setEditingUser] = useState(null);
+  const [userForm, setUserForm] = useState({ full_name: "", phone: "", date_of_joining: "" });
 
   const loadAll = async () => {
     const [{ data: p }, { data: pos }, { data: camp }, { data: sh }, { data: asn }] = await Promise.all([
@@ -450,6 +467,16 @@ function AdminUsers() {
   const toggleAdmin = async (id, current) => {
     await supabase.from("profiles").update({ role: current === "admin" ? "user" : "admin" }).eq("id", id);
     loadAll();
+  };
+
+  const saveUserEdit = async (id) => {
+    const { error } = await supabase.from("profiles").update({
+      full_name: userForm.full_name.trim(),
+      phone: userForm.phone.trim() || null,
+      date_of_joining: userForm.date_of_joining || null,
+    }).eq("id", id);
+    if (!error) { setEditingUser(null); loadAll(); }
+    else alert(error.message);
   };
 
   if (profiles === null) return <Loading />;
@@ -546,20 +573,46 @@ function AdminUsers() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
-              {["Name", "Role", "Assignments", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
+              {["Name", "Phone", "Joined", "Role", "Assignments", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {profiles.map(p => {
               const their = assignments.filter(a => a.user_id === p.id);
+              const isEditing = editingUser === p.id;
               return (
                 <tr key={p.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
-                  <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>{p.full_name}</td>
+                  <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>
+                    {isEditing ? (
+                      <input value={userForm.full_name} onChange={e => setUserForm(f => ({ ...f, full_name: e.target.value }))}
+                        style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 12, width: 130 }} />
+                    ) : p.full_name}
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    {isEditing ? (
+                      <input value={userForm.phone} onChange={e => setUserForm(f => ({ ...f, phone: e.target.value }))} placeholder="03xx-xxxxxxx"
+                        style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 12, width: 110 }} />
+                    ) : (p.phone || "—")}
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    {isEditing ? (
+                      <input type="date" value={userForm.date_of_joining} onChange={e => setUserForm(f => ({ ...f, date_of_joining: e.target.value }))}
+                        style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 12 }} />
+                    ) : (p.date_of_joining || "—")}
+                  </td>
                   <td style={{ padding: "8px" }}>{p.role}</td>
                   <td style={{ padding: "8px", color: "#6B7280" }}>
                     {their.length === 0 ? "—" : their.map(a => `${a.position.name} (${a.campuses?.name || a.campus_code})`).join(", ")}
                   </td>
-                  <td style={{ padding: "8px" }}>
+                  <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                    {isEditing ? (
+                      <>
+                        <button onClick={() => saveUserEdit(p.id)} style={{ fontSize: 11, color: "#059669", background: "none", border: "1px solid #059669", borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Save</button>
+                        <button onClick={() => setEditingUser(null)} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Cancel</button>
+                      </>
+                    ) : (
+                      <button onClick={() => { setEditingUser(p.id); setUserForm({ full_name: p.full_name || "", phone: p.phone || "", date_of_joining: p.date_of_joining || "" }); }} style={{ fontSize: 11, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Edit</button>
+                    )}
                     <button onClick={() => toggleAdmin(p.id, p.role)} style={{ fontSize: 11, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
                       {p.role === "admin" ? "Revoke Admin" : "Make Admin"}
                     </button>
@@ -591,6 +644,10 @@ function AdminMasterData() {
   const [newPos, setNewPos] = useState({ name: "", levelId: "", departmentId: "", reportsToId: "" });
 
   const [editing, setEditing] = useState(null); // { table, key, field, value }
+
+  const [importPositionId, setImportPositionId] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const loadAll = async () => {
     const [{ data: d }, { data: l }, { data: s }, { data: p }, { data: c }] = await Promise.all([
@@ -634,6 +691,71 @@ function AdminMasterData() {
     const { error } = await supabase.from("positions").update({ [field]: value || null }).eq("id", id);
     if (!error) loadAll();
     else alert(error.message);
+  };
+
+  const handleImportFile = (file) => {
+    if (!importPositionId) { setImportMsg("Pick a position first."); return; }
+    setImporting(true);
+    setImportMsg("");
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const rows = results.data;
+          // 1. Resolve/create kpi_areas for every distinct area_number in the file.
+          const areaNumbers = [...new Set(rows.map(r => String(r.area_number).trim()))];
+          const { data: existingAreas } = await supabase
+            .from("kpi_areas").select("*").eq("position_id", importPositionId);
+          const areaMap = {}; // area_number -> id
+          (existingAreas || []).forEach(a => { areaMap[String(a.area_number)] = a.id; });
+
+          for (const num of areaNumbers) {
+            if (areaMap[num]) continue;
+            const sample = rows.find(r => String(r.area_number).trim() === num);
+            const { data: inserted, error } = await supabase
+              .from("kpi_areas")
+              .insert({
+                position_id: importPositionId,
+                area_number: parseInt(num, 10),
+                area_name: (sample.area_name || "").trim(),
+                kpi_count: rows.filter(r => String(r.area_number).trim() === num).length,
+              })
+              .select().single();
+            if (error) throw error;
+            areaMap[num] = inserted.id;
+          }
+
+          // 2. Upsert every KPI row against (area_id, kpi_number).
+          const kpiRows = rows.map(r => ({
+            area_id: areaMap[String(r.area_number).trim()],
+            kpi_number: (r.kpi_number || "").trim(),
+            label: (r.label || "").trim(),
+            formula: (r.formula || "").trim() || null,
+            data_source: (r.data_source || "").trim() || null,
+            baseline_guidance: (r.baseline_guidance || "").trim() || null,
+            target_guidance: (r.target_guidance || "").trim() || null,
+            benchmark_guidance: (r.benchmark_guidance || "").trim() || null,
+            lower_is_better: String(r.lower_is_better || "").trim().toLowerCase() === "true"
+              || String(r.lower_is_better || "").trim().toLowerCase() === "yes",
+            notes: (r.notes || "").trim() || null,
+          })).filter(r => r.area_id && r.kpi_number);
+
+          const { error: kpiError } = await supabase
+            .from("kpis")
+            .upsert(kpiRows, { onConflict: "area_id,kpi_number" });
+          if (kpiError) throw kpiError;
+
+          setImportMsg(`Imported ${kpiRows.length} KPIs across ${areaNumbers.length} areas.`);
+          loadAll();
+        } catch (err) {
+          setImportMsg("Error: " + err.message);
+        } finally {
+          setImporting(false);
+        }
+      },
+      error: (err) => { setImportMsg("Error reading file: " + err.message); setImporting(false); },
+    });
   };
 
   if (!loaded) return <Loading />;
@@ -709,6 +831,27 @@ function AdminMasterData() {
           ))}
           {campuses.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>none yet</div>}
         </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>Bulk Import KPIs (CSV)</div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12, lineHeight: 1.5 }}>
+          Upload a CSV for one position instead of asking for SQL each time. Columns (header row required):
+          <code style={{ display: "block", background: "#F9FAFB", padding: "6px 8px", borderRadius: 6, marginTop: 4, fontSize: 10 }}>
+            area_number, area_name, kpi_number, label, formula, data_source, baseline_guidance, target_guidance, benchmark_guidance, lower_is_better, notes
+          </code>
+          Only area_number, area_name, kpi_number, and label are required — the rest can be left blank. Re-uploading the same position updates existing KPIs instead of duplicating them.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select value={importPositionId} onChange={e => setImportPositionId(e.target.value)} style={{ ...input, width: 240 }}>
+            <option value="">Select position to import into...</option>
+            {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input type="file" accept=".csv" disabled={importing}
+            onChange={e => e.target.files[0] && handleImportFile(e.target.files[0])} style={{ fontSize: 12 }} />
+        </div>
+        {importing && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>Importing...</div>}
+        {importMsg && <div style={{ fontSize: 11, color: importMsg.startsWith("Error") ? "#DC2626" : "#059669", marginTop: 8 }}>{importMsg}</div>}
       </div>
 
       <div style={card}>
