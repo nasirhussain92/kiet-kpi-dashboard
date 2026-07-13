@@ -14,21 +14,33 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const loadedOnce = React.useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => setSession(sess));
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
+      // Ignore no-op refresh events once we've already loaded — Supabase
+      // re-checks the session on every tab focus, which was remounting
+      // the whole app and resetting whatever tab/view the admin was on.
+      setSession(prev => {
+        if (loadedOnce.current && prev && sess && prev.user.id === sess.user.id) {
+          return prev; // same user, same session — don't trigger a re-fetch
+        }
+        return sess;
+      });
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (session === undefined) return;
-    if (!session) { setProfile(null); setProfileLoading(false); return; }
+    if (!session) { setProfile(null); setProfileLoading(false); loadedOnce.current = false; return; }
     (async () => {
-      setProfileLoading(true);
+      if (!loadedOnce.current) setProfileLoading(true);
       const { data } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
       setProfile(data);
       setProfileLoading(false);
+      loadedOnce.current = true;
     })();
   }, [session]);
 
@@ -320,8 +332,13 @@ function KpiEntry({ assignment }) {
 /* ================= ADMIN APP ================= */
 
 function AdminApp({ profile }) {
-  const [tab, setTab] = useState("tracker");
+  const [tab, setTab] = useState(() => sessionStorage.getItem("kiet-admin-tab") || "tracker");
   const logout = () => supabase.auth.signOut();
+
+  const changeTab = (t) => {
+    setTab(t);
+    sessionStorage.setItem("kiet-admin-tab", t);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#F3F4F6", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
@@ -329,10 +346,10 @@ function AdminApp({ profile }) {
         title="KIET — KPI Compliance Dashboard"
         subtitle={`Admin: ${profile.full_name} · Registrar Office`}
         onLogout={logout}
-        tabs={[{ id: "tracker", label: "📋 Tracker" }, { id: "users", label: "👥 Users & Assignments" }]}
-        tab={tab} setTab={setTab}
+        tabs={[{ id: "tracker", label: "📋 Tracker" }, { id: "users", label: "👥 Users & Assignments" }, { id: "master", label: "🗂️ Master Data" }]}
+        tab={tab} setTab={changeTab}
       />
-      {tab === "tracker" ? <AdminTracker /> : <AdminUsers />}
+      {tab === "tracker" ? <AdminTracker /> : tab === "users" ? <AdminUsers /> : <AdminMasterData />}
     </div>
   );
 }
@@ -387,23 +404,23 @@ function AdminUsers() {
   const [profiles, setProfiles] = useState(null);
   const [positions, setPositions] = useState([]);
   const [campuses, setCampuses] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [form, setForm] = useState({ userId: "", positionId: "", campusCode: "" });
+  const [form, setForm] = useState({ userId: "", positionId: "", campusCode: "", shiftId: "" });
   const [msg, setMsg] = useState("");
 
-  const [posForm, setPosForm] = useState({ name: "", category: "Senior" });
-  const [posMsg, setPosMsg] = useState("");
-  const [campForm, setCampForm] = useState({ code: "", name: "" });
-  const [campMsg, setCampMsg] = useState("");
+  const [reassigning, setReassigning] = useState(null);
+  const [reassignTo, setReassignTo] = useState("");
 
   const loadAll = async () => {
-    const [{ data: p }, { data: pos }, { data: camp }, { data: asn }] = await Promise.all([
+    const [{ data: p }, { data: pos }, { data: camp }, { data: sh }, { data: asn }] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("positions").select("*").order("name"),
       supabase.from("campuses").select("*").order("name"),
-      supabase.from("assignments").select("id,user_id,campus_code,position:positions(name),campuses(name)"),
+      supabase.from("shifts").select("*").order("name"),
+      supabase.from("assignments").select("id,user_id,campus_code,shift_id,position:positions(id,name),campuses(name),shifts(name)"),
     ]);
-    setProfiles(p || []); setPositions(pos || []); setCampuses(camp || []); setAssignments(asn || []);
+    setProfiles(p || []); setPositions(pos || []); setCampuses(camp || []); setShifts(sh || []); setAssignments(asn || []);
   };
 
   useEffect(() => { loadAll(); }, []);
@@ -412,9 +429,22 @@ function AdminUsers() {
     if (!form.userId || !form.positionId || !form.campusCode) { setMsg("Pick a user, position, and campus."); return; }
     const { error } = await supabase.from("assignments").insert({
       user_id: form.userId, position_id: form.positionId, campus_code: form.campusCode,
+      shift_id: form.shiftId || null,
     });
     setMsg(error ? error.message : "Assignment added.");
-    if (!error) { loadAll(); setForm({ userId: "", positionId: "", campusCode: "" }); }
+    if (!error) { loadAll(); setForm({ userId: "", positionId: "", campusCode: "", shiftId: "" }); }
+  };
+
+  const removeAssignment = async (id) => {
+    if (!window.confirm("Remove this assignment? The person's KPI entries for it will stay in the database but won't be reachable from the UI unless reassigned again.")) return;
+    await supabase.from("assignments").delete().eq("id", id);
+    loadAll();
+  };
+
+  const saveReassign = async (id) => {
+    if (!reassignTo) return;
+    const { error } = await supabase.from("assignments").update({ user_id: reassignTo }).eq("id", id);
+    if (!error) { setReassigning(null); setReassignTo(""); loadAll(); }
   };
 
   const toggleAdmin = async (id, current) => {
@@ -422,62 +452,16 @@ function AdminUsers() {
     loadAll();
   };
 
-  const addPosition = async () => {
-    if (!posForm.name.trim()) { setPosMsg("Enter a position name."); return; }
-    const { error } = await supabase.from("positions").insert({ name: posForm.name.trim(), category: posForm.category });
-    setPosMsg(error ? error.message : "Position added.");
-    if (!error) { loadAll(); setPosForm({ name: "", category: "Senior" }); }
-  };
-
-  const addCampus = async () => {
-    if (!campForm.code.trim() || !campForm.name.trim()) { setCampMsg("Enter both a code and a name."); return; }
-    const { error } = await supabase.from("campuses").insert({ code: campForm.code.trim().toUpperCase(), name: campForm.name.trim() });
-    setCampMsg(error ? error.message : "Campus added.");
-    if (!error) { loadAll(); setCampForm({ code: "", name: "" }); }
-  };
-
   if (profiles === null) return <Loading />;
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 24px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
-          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>Add a Position</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input value={posForm.name} onChange={e => setPosForm(f => ({ ...f, name: e.target.value }))} placeholder="Position name (e.g. HoD Data Science)"
-              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" }} />
-            <select value={posForm.category} onChange={e => setPosForm(f => ({ ...f, category: e.target.value }))}
-              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12 }}>
-              {["Senior", "Dean", "Director", "HoD"].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={addPosition} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add Position</button>
-            {posMsg && <div style={{ fontSize: 11, color: "#6B7280" }}>{posMsg}</div>}
-          </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: "#9CA3AF" }}>
-            Current: {positions.map(p => p.name).join(", ") || "none"}
-          </div>
-        </div>
-
-        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
-          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>Add a Campus</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input value={campForm.code} onChange={e => setCampForm(f => ({ ...f, code: e.target.value }))} placeholder="Code (e.g. EC)"
-              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" }} />
-            <input value={campForm.name} onChange={e => setCampForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name (e.g. Education City)"
-              style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" }} />
-            <button onClick={addCampus} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add Campus</button>
-            {campMsg && <div style={{ fontSize: 11, color: "#6B7280" }}>{campMsg}</div>}
-          </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: "#9CA3AF" }}>
-            Current: {campuses.map(c => `${c.name} (${c.code})`).join(", ") || "none"}
-          </div>
-        </div>
-      </div>
-
       <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
         <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>Add a Position Assignment</div>
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>The person must have signed up at least once before they appear in this list.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
+          The person must have signed up at least once before they appear here. Need a new position, campus, or shift first? Add it under Master Data.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
           <div>
             <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Person</label>
             <select value={form.userId} onChange={e => setForm(f => ({ ...f, userId: e.target.value }))} style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px", fontSize: 12 }}>
@@ -499,9 +483,62 @@ function AdminUsers() {
               {campuses.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
             </select>
           </div>
+          <div>
+            <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Shift (optional)</label>
+            <select value={form.shiftId} onChange={e => setForm(f => ({ ...f, shiftId: e.target.value }))} style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px", fontSize: 12 }}>
+              <option value="">—</option>
+              {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
           <button onClick={addAssignment} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
         </div>
         {msg && <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>{msg}</div>}
+      </div>
+
+      <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", overflowX: "auto" }}>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>All Assignments</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
+              {["Position", "Campus", "Shift", "Person", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {assignments.map(a => (
+              <tr key={a.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>{a.position.name}</td>
+                <td style={{ padding: "8px", color: "#9CA3AF" }}>{a.campuses?.name || a.campus_code}</td>
+                <td style={{ padding: "8px", color: "#9CA3AF" }}>{a.shifts?.name || "—"}</td>
+                <td style={{ padding: "8px", color: "#6B7280" }}>
+                  {reassigning === a.id ? (
+                    <select value={reassignTo} onChange={e => setReassignTo(e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                      <option value="">Select new person...</option>
+                      {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                    </select>
+                  ) : (
+                    profiles.find(p => p.id === a.user_id)?.full_name || "Unassigned"
+                  )}
+                </td>
+                <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                  {reassigning === a.id ? (
+                    <>
+                      <button onClick={() => saveReassign(a.id)} style={{ fontSize: 11, color: "#059669", background: "none", border: "1px solid #059669", borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Save</button>
+                      <button onClick={() => { setReassigning(null); setReassignTo(""); }} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setReassigning(a.id); setReassignTo(a.user_id || ""); }} style={{ fontSize: 11, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Reassign</button>
+                      <button onClick={() => removeAssignment(a.id)} style={{ fontSize: 11, color: "#DC2626", background: "none", border: "1px solid #DC2626", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {assignments.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: "8px", color: "#9CA3AF" }}>No assignments yet.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", overflowX: "auto" }}>
@@ -530,6 +567,203 @@ function AdminUsers() {
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ================= MASTER DATA ================= */
+
+function AdminMasterData() {
+  const [departments, setDepartments] = useState([]);
+  const [levels, setLevels] = useState([]);
+  const [shifts, setShifts] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [campuses, setCampuses] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const [newDept, setNewDept] = useState("");
+  const [newLevel, setNewLevel] = useState("");
+  const [newShift, setNewShift] = useState("");
+  const [newCamp, setNewCamp] = useState({ code: "", name: "" });
+  const [newPos, setNewPos] = useState({ name: "", levelId: "", departmentId: "", reportsToId: "" });
+
+  const [editing, setEditing] = useState(null); // { table, key, field, value }
+
+  const loadAll = async () => {
+    const [{ data: d }, { data: l }, { data: s }, { data: p }, { data: c }] = await Promise.all([
+      supabase.from("departments").select("*").order("name"),
+      supabase.from("position_levels").select("*").order("name"),
+      supabase.from("shifts").select("*").order("name"),
+      supabase.from("positions").select("*, level:position_levels(name), department:departments(name), reports_to:reports_to_position_id(name)").order("name"),
+      supabase.from("campuses").select("*").order("name"),
+    ]);
+    setDepartments(d || []); setLevels(l || []); setShifts(s || []); setPositions(p || []); setCampuses(c || []);
+    setLoaded(true);
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const addSimple = async (table, payload, resetFn) => {
+    const { error } = await supabase.from(table).insert(payload);
+    if (!error) { loadAll(); resetFn(); }
+    else alert(error.message);
+  };
+
+  const renameSimple = async (table, matchCol, matchVal, field, value) => {
+    const { error } = await supabase.from(table).update({ [field]: value }).eq(matchCol, matchVal);
+    if (!error) { setEditing(null); loadAll(); }
+    else alert(error.message);
+  };
+
+  const addPosition = async () => {
+    if (!newPos.name.trim()) return;
+    const { error } = await supabase.from("positions").insert({
+      name: newPos.name.trim(),
+      level_id: newPos.levelId || null,
+      department_id: newPos.departmentId || null,
+      reports_to_position_id: newPos.reportsToId || null,
+    });
+    if (!error) { loadAll(); setNewPos({ name: "", levelId: "", departmentId: "", reportsToId: "" }); }
+    else alert(error.message);
+  };
+
+  const updatePositionField = async (id, field, value) => {
+    const { error } = await supabase.from("positions").update({ [field]: value || null }).eq("id", id);
+    if (!error) loadAll();
+    else alert(error.message);
+  };
+
+  if (!loaded) return <Loading />;
+
+  const card = { background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
+  const label = { fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 };
+  const input = { width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, boxSizing: "border-box" };
+  const smallBtn = { background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" };
+
+  const SimpleList = ({ title, table, items, newVal, setNewVal, placeholder }) => (
+    <div style={card}>
+      <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>{title}</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input value={newVal} onChange={e => setNewVal(e.target.value)} placeholder={placeholder} style={input} />
+        <button onClick={() => addSimple(table, { name: newVal.trim() }, () => setNewVal(""))} style={smallBtn}>Add</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflowY: "auto" }}>
+        {items.map(it => (
+          <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            {editing?.table === table && editing?.key === it.id ? (
+              <>
+                <input value={editing.value} onChange={e => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12 }} />
+                <button onClick={() => renameSimple(table, "id", it.id, "name", editing.value)} style={{ color: "#059669", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Save</button>
+                <button onClick={() => setEditing(null)} style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1, color: "#374151" }}>{it.name}</span>
+                <button onClick={() => setEditing({ table, key: it.id, value: it.name })} style={{ color: BLUE, background: "none", border: "none", cursor: "pointer" }}>Edit</button>
+              </>
+            )}
+          </div>
+        ))}
+        {items.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>none yet</div>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "20px 24px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+        <SimpleList title="Departments" table="departments" items={departments} newVal={newDept} setNewVal={setNewDept} placeholder="e.g. Computer Science" />
+        <SimpleList title="Position Levels" table="position_levels" items={levels} newVal={newLevel} setNewVal={setNewLevel} placeholder="e.g. Deputy Manager" />
+        <SimpleList title="Shifts" table="shifts" items={shifts} newVal={newShift} setNewVal={setNewShift} placeholder="e.g. Morning" />
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>Campuses</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input value={newCamp.code} onChange={e => setNewCamp(c => ({ ...c, code: e.target.value }))} placeholder="Code (e.g. EC)" style={{ ...input, width: 120 }} />
+          <input value={newCamp.name} onChange={e => setNewCamp(c => ({ ...c, name: e.target.value }))} placeholder="Full name" style={input} />
+          <button onClick={() => addSimple("campuses", { code: newCamp.code.trim().toUpperCase(), name: newCamp.name.trim() }, () => setNewCamp({ code: "", name: "" }))} style={smallBtn}>Add</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {campuses.map(c => (
+            <div key={c.code} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              {editing?.table === "campuses" && editing?.key === c.code ? (
+                <>
+                  <span style={{ color: "#9CA3AF" }}>{c.code}</span>
+                  <input value={editing.value} onChange={e => setEditing(ed => ({ ...ed, value: e.target.value }))}
+                    style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12 }} />
+                  <button onClick={() => renameSimple("campuses", "code", c.code, "name", editing.value)} style={{ color: "#059669", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Save</button>
+                  <button onClick={() => setEditing(null)} style={{ color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, color: "#374151" }}>{c.name} <span style={{ color: "#9CA3AF" }}>({c.code})</span></span>
+                  <button onClick={() => setEditing({ table: "campuses", key: c.code, value: c.name })} style={{ color: BLUE, background: "none", border: "none", cursor: "pointer" }}>Edit</button>
+                </>
+              )}
+            </div>
+          ))}
+          {campuses.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>none yet</div>}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>Positions / Designations</div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
+          "Reports to" sets the general org rule for this position (e.g. HoD → Dean). Per-person overrides can be added later if a specific case differs.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr auto", gap: 8, marginBottom: 16 }}>
+          <input value={newPos.name} onChange={e => setNewPos(f => ({ ...f, name: e.target.value }))} placeholder="Position name" style={input} />
+          <select value={newPos.levelId} onChange={e => setNewPos(f => ({ ...f, levelId: e.target.value }))} style={input}>
+            <option value="">Level...</option>
+            {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          <select value={newPos.departmentId} onChange={e => setNewPos(f => ({ ...f, departmentId: e.target.value }))} style={input}>
+            <option value="">Department...</option>
+            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <select value={newPos.reportsToId} onChange={e => setNewPos(f => ({ ...f, reportsToId: e.target.value }))} style={input}>
+            <option value="">Reports to...</option>
+            {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button onClick={addPosition} style={smallBtn}>Add</button>
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
+              {["Position", "Level", "Department", "Reports To"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map(p => (
+              <tr key={p.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>{p.name}</td>
+                <td style={{ padding: "8px" }}>
+                  <select value={p.level_id || ""} onChange={e => updatePositionField(p.id, "level_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                    <option value="">—</option>
+                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </td>
+                <td style={{ padding: "8px" }}>
+                  <select value={p.department_id || ""} onChange={e => updatePositionField(p.id, "department_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                    <option value="">—</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </td>
+                <td style={{ padding: "8px" }}>
+                  <select value={p.reports_to_position_id || ""} onChange={e => updatePositionField(p.id, "reports_to_position_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                    <option value="">—</option>
+                    {positions.filter(o => o.id !== p.id).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </td>
+              </tr>
+            ))}
+            {positions.length === 0 && <tr><td colSpan={4} style={{ padding: 8, color: "#9CA3AF" }}>none yet</td></tr>}
           </tbody>
         </table>
       </div>
