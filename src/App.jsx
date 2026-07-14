@@ -265,7 +265,7 @@ function UserApp({ profile }) {
     if (myPositionIds.length === 0) { setPendingApprovals([]); return; }
     const { data: candidates } = await supabase
       .from("assignments")
-      .select("id, campus_code, status, position:positions(id,name,reports_to_position_id), campuses(name), user:profiles(full_name)")
+      .select("id, campus_code, status, position:positions(id,name,reports_to_position_id), campuses(name), user:profiles!user_id(full_name)")
       .eq("status", "submitted");
     const mine = myAssignments.reduce((acc, a) => { acc[a.position.id] = a.campus_code; return acc; }, {});
     const relevant = (candidates || []).filter(c => {
@@ -615,7 +615,7 @@ function AdminTracker() {
   const load = async () => {
     const { data } = await supabase
       .from("assignments")
-      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, campuses(name), position:positions(id,name,category,reports_to_position_id), user:profiles(full_name)")
+      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, campuses(name), position:positions(id,name,category,reports_to_position_id), user:profiles!user_id(full_name)")
       .order("id");
     setRows(data || []);
   };
