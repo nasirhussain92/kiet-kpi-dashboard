@@ -20,11 +20,17 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const loadedOnce = React.useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((evt, sess) => {
+      if (evt === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+        setSession(sess);
+        return;
+      }
       // Ignore no-op refresh events once we've already loaded — Supabase
       // re-checks the session on every tab focus, which was remounting
       // the whole app and resetting whatever tab/view the admin was on.
@@ -50,6 +56,7 @@ export default function App() {
     })();
   }, [session]);
 
+  if (recoveryMode) return <ResetPasswordScreen onDone={() => setRecoveryMode(false)} />;
   if (session === undefined) return <Loading />;
   if (!session) return <AuthScreen />;
   if (profileLoading || !profile) return <Loading />;
@@ -71,8 +78,62 @@ function Loading({ label = "Loading..." }) {
 
 /* ================= AUTH ================= */
 
+function ResetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr("");
+    if (password.length < 6) { setErr("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setErr("Passwords don't match."); return; }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setDone(true);
+    } catch (e2) {
+      setErr(e2.message || "Something went wrong. Please try the reset link again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+      <div style={{ background: "white", borderRadius: 16, padding: 32, width: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+        <div style={{ fontWeight: 700, fontSize: 18, color: BLUE, marginBottom: 4 }}>Set a New Password</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>KIET KPI Dashboard</div>
+
+        {done ? (
+          <>
+            <div style={{ fontSize: 13, color: "#059669", marginBottom: 16 }}>Password updated. You can continue to the dashboard now.</div>
+            <button onClick={onDone} style={{ width: "100%", background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              Continue
+            </button>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New password" required minLength={6}
+              style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 10, boxSizing: "border-box" }} />
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Confirm new password" required minLength={6}
+              style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 14, boxSizing: "border-box" }} />
+            {err && <div style={{ fontSize: 12, color: "#DC2626", marginBottom: 12 }}>{err}</div>}
+            <button type="submit" disabled={busy} style={{ width: "100%", background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              {busy ? "Please wait..." : "Update Password"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen() {
-  const [mode, setMode] = useState("login"); // login | signup
+  const [mode, setMode] = useState("login"); // login | signup | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -84,7 +145,12 @@ function AuthScreen() {
     setErr("");
     setBusy(true);
     try {
-      if (mode === "signup") {
+      if (mode === "forgot") {
+        const redirectTo = window.location.origin + import.meta.env.BASE_URL;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+        setErr("If that email has an account, a reset link has been sent. Check your inbox.");
+      } else if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email, password,
           options: { data: { full_name: fullName } },
@@ -106,6 +172,8 @@ function AuthScreen() {
     }
   };
 
+  const isGoodMsg = err.startsWith("Account created") || err.startsWith("If that email");
+
   return (
     <div style={{ minHeight: "100vh", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <form onSubmit={submit} style={{ background: "white", borderRadius: 16, padding: 32, width: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
@@ -118,19 +186,29 @@ function AuthScreen() {
         )}
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required
           style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 10, boxSizing: "border-box" }} />
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required minLength={6}
-          style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 14, boxSizing: "border-box" }} />
+        {mode !== "forgot" && (
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required minLength={6}
+            style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, marginBottom: 14, boxSizing: "border-box" }} />
+        )}
 
-        {err && <div style={{ fontSize: 12, color: err.startsWith("Account created") ? "#059669" : "#DC2626", marginBottom: 12 }}>{err}</div>}
+        {err && <div style={{ fontSize: 12, color: isGoodMsg ? "#059669" : "#DC2626", marginBottom: 12 }}>{err}</div>}
 
         <button type="submit" disabled={busy} style={{ width: "100%", background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
-          {busy ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
+          {busy ? "Please wait..." : mode === "login" ? "Log In" : mode === "signup" ? "Create Account" : "Send Reset Link"}
         </button>
-        <div style={{ textAlign: "center", fontSize: 12, color: "#6B7280" }}>
-          {mode === "login" ? (
-            <>New here? <a onClick={() => setMode("signup")} style={{ color: BLUE, cursor: "pointer", fontWeight: 600 }}>Create an account</a></>
-          ) : (
-            <>Already have an account? <a onClick={() => setMode("login")} style={{ color: BLUE, cursor: "pointer", fontWeight: 600 }}>Log in</a></>
+
+        <div style={{ textAlign: "center", fontSize: 12, color: "#6B7280", display: "flex", flexDirection: "column", gap: 6 }}>
+          {mode === "login" && (
+            <>
+              <div>New here? <a onClick={() => { setMode("signup"); setErr(""); }} style={{ color: BLUE, cursor: "pointer", fontWeight: 600 }}>Create an account</a></div>
+              <div><a onClick={() => { setMode("forgot"); setErr(""); }} style={{ color: BLUE, cursor: "pointer", fontWeight: 600 }}>Forgot password?</a></div>
+            </>
+          )}
+          {mode === "signup" && (
+            <div>Already have an account? <a onClick={() => { setMode("login"); setErr(""); }} style={{ color: BLUE, cursor: "pointer", fontWeight: 600 }}>Log in</a></div>
+          )}
+          {mode === "forgot" && (
+            <div><a onClick={() => { setMode("login"); setErr(""); }} style={{ color: BLUE, cursor: "pointer", fontWeight: 600 }}>Back to log in</a></div>
           )}
         </div>
       </form>
@@ -142,7 +220,7 @@ function AuthScreen() {
 
 function TopBar({ title, subtitle, onLogout, tabs, tab, setTab }) {
   return (
-    <div style={{ background: BLUE, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+    <div className="no-print" style={{ background: BLUE, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 40, borderRadius: 4, background: "white", padding: 2 }} />
         <div>
@@ -169,18 +247,49 @@ function TopBar({ title, subtitle, onLogout, tabs, tab, setTab }) {
 function UserApp({ profile }) {
   const [assignments, setAssignments] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [view, setView] = useState("kpis"); // kpis | approvals
   const logout = () => supabase.auth.signOut();
+
+  const ASSIGNMENT_SELECT = "id, campus_code, status, submitted_at, approved_at, deadline, sent_date, received_date, correspondence_notes, position:positions(id,name,reports_to_position_id), campuses(name)";
+
+  const loadAssignments = async () => {
+    const { data } = await supabase.from("assignments").select(ASSIGNMENT_SELECT).eq("user_id", profile.id);
+    setAssignments(data || []);
+    return data || [];
+  };
+
+  const loadPendingApprovals = async (myAssignments) => {
+    // Positions I hold — anyone whose position reports_to one of these, at a matching campus, and is 'submitted'.
+    const myPositionIds = [...new Set(myAssignments.map(a => a.position.id))];
+    if (myPositionIds.length === 0) { setPendingApprovals([]); return; }
+    const { data: candidates } = await supabase
+      .from("assignments")
+      .select("id, campus_code, status, position:positions(id,name,reports_to_position_id), campuses(name), user:profiles(full_name)")
+      .eq("status", "submitted");
+    const mine = myAssignments.reduce((acc, a) => { acc[a.position.id] = a.campus_code; return acc; }, {});
+    const relevant = (candidates || []).filter(c => {
+      const parentId = c.position.reports_to_position_id;
+      if (!parentId || !(parentId in mine)) return false;
+      const myCampus = mine[parentId];
+      return myCampus === c.campus_code || myCampus === "ALL";
+    });
+    setPendingApprovals(relevant);
+  };
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("assignments")
-        .select("id, campus_code, position:positions(id,name), campuses(name)")
-        .eq("user_id", profile.id);
-      setAssignments(data || []);
-      if (data && data.length === 1) setSelected(data[0]);
+      const data = await loadAssignments();
+      if (data.length === 1) setSelected(data[0]);
+      loadPendingApprovals(data);
     })();
   }, [profile.id]);
+
+  const refreshAfterStatusChange = async () => {
+    const data = await loadAssignments();
+    if (selected) setSelected(data.find(a => a.id === selected.id) || null);
+    loadPendingApprovals(data);
+  };
 
   if (assignments === null) return <Loading />;
 
@@ -195,10 +304,34 @@ function UserApp({ profile }) {
     );
   }
 
+  const tabs = pendingApprovals.length > 0
+    ? [{ id: "kpis", label: "📋 My KPIs" }, { id: "approvals", label: `✅ Approvals (${pendingApprovals.length})` }]
+    : null;
+
+  if (view === "approvals") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#F3F4F6" }}>
+        <TopBar title={`Welcome, ${profile.full_name}`} subtitle="Items awaiting your approval" onLogout={logout} tabs={tabs} tab={view} setTab={setView} />
+        <div style={{ maxWidth: 700, margin: "20px auto", display: "flex", flexDirection: "column", gap: 12, padding: "0 16px 60px" }}>
+          {pendingApprovals.map(a => (
+            <div key={a.id} style={{ background: "white", borderRadius: 12, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: "#1F2937", fontSize: 14 }}>{a.position.name}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF" }}>{a.user?.full_name} · {a.campuses?.name || a.campus_code}</div>
+              </div>
+              <button onClick={() => { setSelected(a); setView("kpis"); }} style={{ fontSize: 12, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>Review</button>
+            </div>
+          ))}
+          {pendingApprovals.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13 }}>Nothing pending.</div>}
+        </div>
+      </div>
+    );
+  }
+
   if (!selected) {
     return (
       <div style={{ minHeight: "100vh", background: "#F3F4F6" }}>
-        <TopBar title={`Welcome, ${profile.full_name}`} subtitle="Select which position to work on" onLogout={logout} />
+        <TopBar title={`Welcome, ${profile.full_name}`} subtitle="Select which position to work on" onLogout={logout} tabs={tabs} tab={view} setTab={setView} />
         <div style={{ maxWidth: 600, margin: "40px auto", display: "flex", flexDirection: "column", gap: 12, padding: "0 16px" }}>
           {assignments.map(a => (
             <button key={a.id} onClick={() => setSelected(a)} style={{ textAlign: "left", background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, cursor: "pointer" }}>
@@ -217,27 +350,36 @@ function UserApp({ profile }) {
         title={profile.full_name}
         subtitle={`${selected.position.name} · ${selected.campuses?.name || selected.campus_code}`}
         onLogout={logout}
+        tabs={tabs} tab={view} setTab={setView}
       />
       {assignments.length > 1 && (
-        <div style={{ padding: "10px 24px 0" }}>
+        <div className="no-print" style={{ padding: "10px 24px 0" }}>
           <button onClick={() => setSelected(null)} style={{ fontSize: 12, color: BLUE, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>
             ← Switch position
           </button>
         </div>
       )}
-      <KpiEntry assignment={selected} />
+      <KpiEntry assignment={selected} onStatusChange={refreshAfterStatusChange} />
     </div>
   );
 }
 
 /* ================= KPI ENTRY (shared by user view + admin edit modal) ================= */
 
-function KpiEntry({ assignment }) {
+function KpiEntry({ assignment, isAdmin, onStatusChange }) {
   const [areas, setAreas] = useState(null);
   const [kpis, setKpis] = useState([]);
   const [entries, setEntries] = useState({});
   const [openArea, setOpenArea] = useState(null);
   const [saving, setSaving] = useState({});
+  const [canApprove, setCanApprove] = useState(false);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [corr, setCorr] = useState({
+    deadline: assignment.deadline || "", sent_date: assignment.sent_date || "",
+    received_date: assignment.received_date || "", correspondence_notes: assignment.correspondence_notes || "",
+  });
+
+  const isFinalAuthority = !assignment.position.reports_to_position_id; // VC — no supervisor, self-approves
 
   useEffect(() => {
     (async () => {
@@ -257,6 +399,19 @@ function KpiEntry({ assignment }) {
       const map = {};
       (entryRows || []).forEach(e => { map[e.kpi_id] = e; });
       setEntries(map);
+
+      // Can the logged-in user approve this? (holds the position it reports to, matching campus)
+      if (!isAdmin && assignment.position.reports_to_position_id) {
+        const { data: sess } = await supabase.auth.getSession();
+        const uid = sess?.session?.user?.id;
+        if (uid) {
+          const { data: mine } = await supabase
+            .from("assignments").select("campus_code")
+            .eq("user_id", uid).eq("position_id", assignment.position.reports_to_position_id);
+          const match = (mine || []).some(m => m.campus_code === assignment.campus_code || m.campus_code === "ALL");
+          setCanApprove(match);
+        }
+      }
     })();
   }, [assignment.id, assignment.position.id]);
 
@@ -271,10 +426,88 @@ function KpiEntry({ assignment }) {
     setSaving(s => ({ ...s, [kpiId]: false }));
   };
 
+  const submitForApproval = async () => {
+    setWorkflowBusy(true);
+    const newStatus = isFinalAuthority ? "approved" : "submitted";
+    const patch = { status: newStatus, submitted_at: new Date().toISOString() };
+    if (isFinalAuthority) {
+      const { data: sess } = await supabase.auth.getSession();
+      patch.approved_at = new Date().toISOString();
+      patch.approved_by = sess?.session?.user?.id || null;
+    }
+    const { error } = await supabase.from("assignments").update(patch).eq("id", assignment.id);
+    if (!error) onStatusChange?.(newStatus);
+    setWorkflowBusy(false);
+  };
+
+  const approve = async () => {
+    setWorkflowBusy(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const { error } = await supabase.from("assignments").update({
+      status: "approved", approved_at: new Date().toISOString(), approved_by: sess?.session?.user?.id || null,
+    }).eq("id", assignment.id);
+    if (!error) onStatusChange?.("approved");
+    setWorkflowBusy(false);
+  };
+
+  const saveCorrespondence = async () => {
+    await supabase.from("assignments").update({
+      deadline: corr.deadline || null, sent_date: corr.sent_date || null,
+      received_date: corr.received_date || null, correspondence_notes: corr.correspondence_notes || null,
+    }).eq("id", assignment.id);
+  };
+
   if (areas === null) return <Loading />;
+
+  const statusBadge = {
+    draft: { label: "Draft", color: "#6B7280", bg: "#F9FAFB" },
+    submitted: { label: "Submitted — Awaiting Approval", color: "#D97706", bg: "#FFFBEB" },
+    approved: { label: "Approved", color: "#059669", bg: "#ECFDF5" },
+  }[assignment.status || "draft"];
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 24px 60px" }}>
+      <div className="no-print" style={{ background: "white", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <span style={{ background: statusBadge.bg, color: statusBadge.color, fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20 }}>{statusBadge.label}</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => window.print()} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>🖨️ Print</button>
+          {!isAdmin && (assignment.status || "draft") === "draft" && (
+            <button onClick={submitForApproval} disabled={workflowBusy} style={{ fontSize: 11, color: "white", background: BLUE, border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700 }}>
+              {workflowBusy ? "Submitting..." : isFinalAuthority ? "Submit (Final Approval)" : "Submit for Approval"}
+            </button>
+          )}
+          {!isAdmin && assignment.status === "submitted" && canApprove && (
+            <button onClick={approve} disabled={workflowBusy} style={{ fontSize: 11, color: "white", background: "#059669", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700 }}>
+              {workflowBusy ? "Approving..." : "Approve"}
+            </button>
+          )}
+          {isAdmin && assignment.status !== "approved" && (
+            <button onClick={approve} disabled={workflowBusy} style={{ fontSize: 11, color: "white", background: "#059669", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700 }}>
+              {workflowBusy ? "Approving..." : "Approve (admin override)"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isAdmin && (
+        <div className="no-print" style={{ background: "white", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: "#1F2937", marginBottom: 10 }}>Correspondence Tracking</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginBottom: 8 }}>
+            {[["sent_date", "Guide Sent"], ["deadline", "Deadline"], ["received_date", "Received"]].map(([f, lbl]) => (
+              <div key={f}>
+                <label style={{ fontSize: 10, color: "#9CA3AF", display: "block", marginBottom: 2 }}>{lbl}</label>
+                <input type="date" value={corr[f]} onChange={e => setCorr(c => ({ ...c, [f]: e.target.value }))}
+                  style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 8px", fontSize: 12, boxSizing: "border-box" }} />
+              </div>
+            ))}
+          </div>
+          <textarea value={corr.correspondence_notes} onChange={e => setCorr(c => ({ ...c, correspondence_notes: e.target.value }))}
+            placeholder="Follow-up notes (e.g. reminder sent, phone call made...)" rows={2}
+            style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 6, padding: "6px 8px", fontSize: 12, boxSizing: "border-box", marginBottom: 8 }} />
+          <button onClick={saveCorrespondence} style={{ fontSize: 11, color: "white", background: BLUE, border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>Save Correspondence Info</button>
+        </div>
+      )}
+
       {areas.length === 0 && (
         <div style={{ background: "white", borderRadius: 12, padding: 20, color: "#9CA3AF", fontSize: 13 }}>
           No KPI areas defined for this position yet.
@@ -382,14 +615,20 @@ function AdminTracker() {
   const load = async () => {
     const { data } = await supabase
       .from("assignments")
-      .select("id, campus_code, campuses(name), position:positions(id,name,category), user:profiles(full_name)")
+      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, campuses(name), position:positions(id,name,category,reports_to_position_id), user:profiles(full_name)")
       .order("id");
     setRows(data || []);
   };
 
   useEffect(() => { load(); }, []);
 
+  const refresh = async () => {
+    await load();
+  };
+
   if (rows === null) return <Loading />;
+
+  const statusColor = { draft: "#6B7280", submitted: "#D97706", approved: "#059669" };
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 60px" }}>
@@ -403,10 +642,12 @@ function AdminTracker() {
       {view === "analytics" ? <AdminAnalytics rows={rows} onSelectAssignment={setEditing} /> : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
         {rows.map(a => (
-          <div key={a.id} onClick={() => setEditing(a)} style={{ background: "white", borderRadius: 14, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", cursor: "pointer" }}>
+          <div key={a.id} onClick={() => setEditing(a)} style={{ background: "white", borderRadius: 14, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", cursor: "pointer", borderTop: `4px solid ${statusColor[a.status || "draft"]}` }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{a.position.name}</div>
             <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>{a.campuses?.name || a.campus_code}</div>
             <div style={{ fontSize: 11, color: BLUE, fontWeight: 600, marginTop: 6 }}>{a.user?.full_name || "Unassigned"}</div>
+            <div style={{ fontSize: 10, color: statusColor[a.status || "draft"], fontWeight: 700, marginTop: 6, textTransform: "uppercase" }}>{a.status || "draft"}</div>
+            {a.deadline && <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>Deadline: {a.deadline}</div>}
           </div>
         ))}
         {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13 }}>No assignments created yet — go to "Users &amp; Assignments" to add one.</div>}
@@ -415,14 +656,14 @@ function AdminTracker() {
       {editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
           <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
-            <div style={{ background: BLUE, padding: "16px 22px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0 }}>
+            <div className="no-print" style={{ background: BLUE, padding: "16px 22px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{editing.position.name}</div>
                 <div style={{ color: "#93C5FD", fontSize: 11 }}>{editing.user?.full_name} · {editing.campuses?.name || editing.campus_code}</div>
               </div>
               <button onClick={() => setEditing(null)} style={{ background: "none", border: "none", color: "#93C5FD", fontSize: 24, cursor: "pointer" }}>×</button>
             </div>
-            <KpiEntry assignment={editing} />
+            <KpiEntry assignment={editing} isAdmin={true} onStatusChange={refresh} />
           </div>
         </div>
       )}
@@ -495,8 +736,46 @@ function AdminAnalytics({ rows, onSelectAssignment }) {
   const notStarted = perAssignment.filter(p => p.pct === 0).length;
   const tc = (pct) => pct >= 80 ? "#059669" : pct >= 40 ? "#D97706" : "#DC2626";
 
+  const exportCsv = async () => {
+    const { data: entries } = await supabase
+      .from("kpi_entries")
+      .select("assignment_id, kpi_id, baseline, yr1_target, yr2_target, yr3_target, benchmark, actual, status, notes, kpis(kpi_number, label, area_id, kpi_areas(area_name, position_id))");
+    const rowsForCsv = (entries || []).map(e => {
+      const a = rows.find(r => r.id === e.assignment_id);
+      return {
+        Position: a?.position.name || "",
+        Person: a?.user?.full_name || "",
+        Campus: a?.campuses?.name || a?.campus_code || "",
+        Area: e.kpis?.kpi_areas?.area_name || "",
+        "KPI #": e.kpis?.kpi_number || "",
+        "KPI Label": e.kpis?.label || "",
+        Baseline: e.baseline || "",
+        "Year 1": e.yr1_target || "",
+        "Year 2": e.yr2_target || "",
+        "Year 3": e.yr3_target || "",
+        Benchmark: e.benchmark || "",
+        Actual: e.actual || "",
+        Status: e.status || "",
+        Notes: e.notes || "",
+      };
+    });
+    const csv = Papa.unparse(rowsForCsv);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kiet-kpi-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={exportCsv} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          ⬇ Export All KPI Data (CSV)
+        </button>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12 }}>
         {[
           { label: "Assignments", val: perAssignment.length, color: BLUE },
