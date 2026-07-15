@@ -599,10 +599,10 @@ function AdminApp({ profile }) {
         title="KIET — KPI Compliance Dashboard"
         subtitle={`Admin: ${profile.full_name} · Registrar Office`}
         onLogout={logout}
-        tabs={[{ id: "tracker", label: "📋 Tracker" }, { id: "users", label: "👥 Users & Assignments" }, { id: "master", label: "🗂️ Master Data" }]}
+        tabs={[{ id: "tracker", label: "📋 Tracker" }, { id: "users", label: "👥 Users & Assignments" }, { id: "master", label: "🗂️ Master Data" }, { id: "history", label: "🕒 History" }]}
         tab={tab} setTab={changeTab}
       />
-      {tab === "tracker" ? <AdminTracker /> : tab === "users" ? <AdminUsers /> : <AdminMasterData />}
+      {tab === "tracker" ? <AdminTracker /> : tab === "users" ? <AdminUsers /> : tab === "master" ? <AdminMasterData /> : <AdminHistory />}
     </div>
   );
 }
@@ -611,11 +611,12 @@ function AdminTracker() {
   const [rows, setRows] = useState(null);
   const [editing, setEditing] = useState(null);
   const [view, setView] = useState("cards"); // cards | analytics
+  const [sourceFilter, setSourceFilter] = useState("all"); // all | SHEC | KIET
 
   const load = async () => {
     const { data } = await supabase
       .from("assignments")
-      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, campuses(name), position:positions(id,name,category,reports_to_position_id), user:profiles!user_id(full_name)")
+      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, campuses(name), position:positions(id,name,category,reports_to_position_id,kpi_source), user:profiles!user_id(full_name)")
       .order("id");
     setRows(data || []);
   };
@@ -629,28 +630,43 @@ function AdminTracker() {
   if (rows === null) return <Loading />;
 
   const statusColor = { draft: "#6B7280", submitted: "#D97706", approved: "#059669" };
+  const filteredRows = sourceFilter === "all" ? rows : rows.filter(a => (a.position.kpi_source || "SHEC") === sourceFilter);
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 60px" }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {[["cards", "📋 Cards"], ["analytics", "📊 Analytics"]].map(([id, lbl]) => (
-          <button key={id} onClick={() => setView(id)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid " + (view === id ? BLUE : "#E5E7EB"), cursor: "pointer", fontSize: 12, fontWeight: 600, background: view === id ? BLUE : "white", color: view === id ? "white" : "#6B7280" }}>
-            {lbl}
-          </button>
-        ))}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["cards", "📋 Cards"], ["analytics", "📊 Analytics"]].map(([id, lbl]) => (
+            <button key={id} onClick={() => setView(id)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid " + (view === id ? BLUE : "#E5E7EB"), cursor: "pointer", fontSize: 12, fontWeight: 600, background: view === id ? BLUE : "white", color: view === id ? "white" : "#6B7280" }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["all", "All"], ["SHEC", "SHEC-Mandated"], ["KIET", "KIET-Internal"]].map(([id, lbl]) => (
+            <button key={id} onClick={() => setSourceFilter(id)} style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid " + (sourceFilter === id ? BLUE : "#E5E7EB"), cursor: "pointer", fontSize: 11, fontWeight: 600, background: sourceFilter === id ? BLUE : "white", color: sourceFilter === id ? "white" : "#6B7280" }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
       </div>
-      {view === "analytics" ? <AdminAnalytics rows={rows} onSelectAssignment={setEditing} /> : (
+      {view === "analytics" ? <AdminAnalytics rows={filteredRows} onSelectAssignment={setEditing} /> : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
-        {rows.map(a => (
+        {filteredRows.map(a => (
           <div key={a.id} onClick={() => setEditing(a)} style={{ background: "white", borderRadius: 14, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", cursor: "pointer", borderTop: `4px solid ${statusColor[a.status || "draft"]}` }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{a.position.name}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{a.position.name}</div>
+              <span style={{ fontSize: 9, fontWeight: 700, color: (a.position.kpi_source || "SHEC") === "SHEC" ? BLUE : "#7C3AED", background: (a.position.kpi_source || "SHEC") === "SHEC" ? "#EFF6FF" : "#F5F3FF", padding: "2px 6px", borderRadius: 10 }}>
+                {(a.position.kpi_source || "SHEC") === "SHEC" ? "SHEC" : "KIET"}
+              </span>
+            </div>
             <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>{a.campuses?.name || a.campus_code}</div>
             <div style={{ fontSize: 11, color: BLUE, fontWeight: 600, marginTop: 6 }}>{a.user?.full_name || "Unassigned"}</div>
             <div style={{ fontSize: 10, color: statusColor[a.status || "draft"], fontWeight: 700, marginTop: 6, textTransform: "uppercase" }}>{a.status || "draft"}</div>
             {a.deadline && <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>Deadline: {a.deadline}</div>}
           </div>
         ))}
-        {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13 }}>No assignments created yet — go to "Users &amp; Assignments" to add one.</div>}
+        {filteredRows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13 }}>No assignments in this view yet.</div>}
       </div>
       )}
       {editing && (
@@ -1120,7 +1136,7 @@ function AdminMasterData() {
   const [newLevel, setNewLevel] = useState("");
   const [newShift, setNewShift] = useState("");
   const [newCamp, setNewCamp] = useState({ code: "", name: "" });
-  const [newPos, setNewPos] = useState({ name: "", levelId: "", departmentId: "", reportsToId: "" });
+  const [newPos, setNewPos] = useState({ name: "", levelId: "", departmentId: "", reportsToId: "", source: "KIET" });
 
   const [editing, setEditing] = useState(null); // { table, key, field, value }
 
@@ -1161,8 +1177,9 @@ function AdminMasterData() {
       level_id: newPos.levelId || null,
       department_id: newPos.departmentId || null,
       reports_to_position_id: newPos.reportsToId || null,
+      kpi_source: newPos.source,
     });
-    if (!error) { loadAll(); setNewPos({ name: "", levelId: "", departmentId: "", reportsToId: "" }); }
+    if (!error) { loadAll(); setNewPos({ name: "", levelId: "", departmentId: "", reportsToId: "", source: "KIET" }); }
     else alert(error.message);
   };
 
@@ -1306,8 +1323,9 @@ function AdminMasterData() {
         <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>Positions / Designations</div>
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
           "Reports to" sets the general org rule for this position (e.g. HoD → Dean). Per-person overrides can be added later if a specific case differs.
+          <strong> Source</strong> separates the 15 original SHEC-mandated positions from KIET's own internal staff/faculty positions being added over time.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr auto", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 0.8fr auto", gap: 8, marginBottom: 16 }}>
           <input value={newPos.name} onChange={e => setNewPos(f => ({ ...f, name: e.target.value }))} placeholder="Position name" style={input} />
           <select value={newPos.levelId} onChange={e => setNewPos(f => ({ ...f, levelId: e.target.value }))} style={input}>
             <option value="">Level...</option>
@@ -1321,45 +1339,159 @@ function AdminMasterData() {
             <option value="">Reports to...</option>
             {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          <select value={newPos.source} onChange={e => setNewPos(f => ({ ...f, source: e.target.value }))} style={input}>
+            <option value="KIET">KIET-internal</option>
+            <option value="SHEC">SHEC-mandated</option>
+          </select>
           <button onClick={addPosition} style={smallBtn}>Add</button>
         </div>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead>
-            <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
-              {["Position", "Level", "Department", "Reports To"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {positions.map(p => (
-              <tr key={p.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
-                <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>
-                  <input defaultValue={p.name} onBlur={e => e.target.value.trim() && e.target.value.trim() !== p.name && updatePositionField(p.id, "name", e.target.value.trim())}
-                    style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12, width: 160 }} />
-                </td>
-                <td style={{ padding: "8px" }}>
-                  <select value={p.level_id || ""} onChange={e => updatePositionField(p.id, "level_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
-                    <option value="">—</option>
-                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                </td>
-                <td style={{ padding: "8px" }}>
-                  <select value={p.department_id || ""} onChange={e => updatePositionField(p.id, "department_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
-                    <option value="">—</option>
-                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </td>
-                <td style={{ padding: "8px" }}>
-                  <select value={p.reports_to_position_id || ""} onChange={e => updatePositionField(p.id, "reports_to_position_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
-                    <option value="">—</option>
-                    {positions.filter(o => o.id !== p.id).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </select>
-                </td>
-              </tr>
-            ))}
-            {positions.length === 0 && <tr><td colSpan={4} style={{ padding: 8, color: "#9CA3AF" }}>none yet</td></tr>}
-          </tbody>
-        </table>
+        {["SHEC", "KIET"].map(source => {
+          const group = positions.filter(p => (p.kpi_source || "SHEC") === source);
+          if (group.length === 0) return null;
+          return (
+            <div key={source} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: source === "SHEC" ? BLUE : "#7C3AED", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, paddingBottom: 6, borderBottom: `2px solid ${source === "SHEC" ? BLUE : "#7C3AED"}` }}>
+                {source === "SHEC" ? "SHEC-Mandated Positions" : "KIET-Internal Positions"} ({group.length})
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
+                    {["Position", "Level", "Department", "Reports To", "Source"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.map(p => (
+                    <tr key={p.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                      <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>
+                        <input defaultValue={p.name} onBlur={e => e.target.value.trim() && e.target.value.trim() !== p.name && updatePositionField(p.id, "name", e.target.value.trim())}
+                          style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "4px 6px", fontSize: 12, width: 160 }} />
+                      </td>
+                      <td style={{ padding: "8px" }}>
+                        <select value={p.level_id || ""} onChange={e => updatePositionField(p.id, "level_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                          <option value="">—</option>
+                          {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px" }}>
+                        <select value={p.department_id || ""} onChange={e => updatePositionField(p.id, "department_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                          <option value="">—</option>
+                          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px" }}>
+                        <select value={p.reports_to_position_id || ""} onChange={e => updatePositionField(p.id, "reports_to_position_id", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                          <option value="">—</option>
+                          {positions.filter(o => o.id !== p.id).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px" }}>
+                        <select value={p.kpi_source || "SHEC"} onChange={e => updatePositionField(p.id, "kpi_source", e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
+                          <option value="SHEC">SHEC</option>
+                          <option value="KIET">KIET</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+        {positions.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>none yet</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ================= HISTORY / AUDIT TRAIL ================= */
+
+function AdminHistory() {
+  const [logs, setLogs] = useState(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: logRows }, { data: profiles }, { data: assignments }, { data: positions }, { data: kpis }] = await Promise.all([
+        supabase.from("audit_log").select("*").order("changed_at", { ascending: false }).limit(300),
+        supabase.from("profiles").select("id, full_name"),
+        supabase.from("assignments").select("id, user_id, position_id, campus_code"),
+        supabase.from("positions").select("id, name"),
+        supabase.from("kpis").select("id, kpi_number, label"),
+      ]);
+
+      const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p.full_name]));
+      const assignmentMap = Object.fromEntries((assignments || []).map(a => [a.id, a]));
+      const positionMap = Object.fromEntries((positions || []).map(p => [p.id, p.name]));
+      const kpiMap = Object.fromEntries((kpis || []).map(k => [k.id, k]));
+
+      const FIELDS = ["baseline", "yr1_target", "yr2_target", "yr3_target", "benchmark", "actual", "status", "notes"];
+
+      const described = (logRows || []).map(log => {
+        const actorName = profileMap[log.actor] || "Unknown";
+        let context = "", summary = "";
+
+        if (log.table_name === "kpi_entries") {
+          const newRow = log.details?.new || {};
+          const oldRow = log.details?.old || {};
+          const assignment = assignmentMap[newRow.assignment_id];
+          const kpi = kpiMap[newRow.kpi_id];
+          const personName = assignment ? (profileMap[assignment.user_id] || "Unknown") : "Unknown";
+          const posName = assignment ? (positionMap[assignment.position_id] || "") : "";
+          context = `${posName} — ${personName}${kpi ? ` — KPI ${kpi.kpi_number}` : ""}`;
+          if (log.action === "INSERT") {
+            summary = "Created entry" + (kpi ? ` for ${kpi.kpi_number}` : "");
+          } else {
+            const changed = FIELDS.filter(f => (oldRow[f] || "") !== (newRow[f] || ""));
+            summary = changed.length
+              ? changed.map(f => `${f}: "${oldRow[f] || "—"}" → "${newRow[f] || "—"}"`).join("; ")
+              : "No field changes";
+          }
+        } else if (log.table_name === "assignments" && log.action === "status_change") {
+          const assignment = assignmentMap[parseInt(log.record_id, 10)];
+          const personName = assignment ? (profileMap[assignment.user_id] || "Unknown") : "Unknown";
+          const posName = assignment ? (positionMap[assignment.position_id] || "") : "";
+          context = `${posName} — ${personName}`;
+          summary = `Status: ${log.details?.old_status || "—"} → ${log.details?.new_status || "—"}`;
+        } else {
+          context = log.table_name;
+          summary = log.action;
+        }
+
+        return { ...log, actorName, context, summary };
+      });
+
+      setLogs(described);
+    })();
+  }, []);
+
+  if (logs === null) return <Loading />;
+
+  const filtered = query
+    ? logs.filter(l => (l.context + l.summary + l.actorName).toLowerCase().includes(query.toLowerCase()))
+    : logs;
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "20px 24px 60px" }}>
+      <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ fontWeight: 700, color: "#1F2937" }}>Audit Trail (last 300 changes)</div>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter by person, position, or KPI..."
+            style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", fontSize: 12, width: 260, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 600, overflowY: "auto" }}>
+          {filtered.map(l => (
+            <div key={l.id} style={{ padding: "8px 10px", borderBottom: "1px solid #F9FAFB", fontSize: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#9CA3AF", fontSize: 10 }}>
+                <span>{new Date(l.changed_at).toLocaleString()}</span>
+                <span>{l.actorName}</span>
+              </div>
+              <div style={{ fontWeight: 600, color: "#1F2937" }}>{l.context}</div>
+              <div style={{ color: "#6B7280" }}>{l.summary}</div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13, padding: 8 }}>No matching history.</div>}
+        </div>
       </div>
     </div>
   );
