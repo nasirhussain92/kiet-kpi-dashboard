@@ -660,9 +660,8 @@ function AdminTracker() {
           ))}
         </div>
       </div>
-      {view === "analytics" ? <AdminAnalytics rows={filteredRows} onSelectAssignment={setEditing} /> : (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
-        {filteredRows.map(a => (
+      {view === "analytics" ? <AdminAnalytics rows={filteredRows} onSelectAssignment={setEditing} /> : (() => {
+        const renderCard = a => (
           <div key={a.id} onClick={() => setEditing(a)} style={{ background: "white", borderRadius: 14, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", cursor: "pointer", borderTop: `4px solid ${statusColor[a.status || "draft"]}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{a.position.name}</div>
@@ -675,10 +674,49 @@ function AdminTracker() {
             <div style={{ fontSize: 10, color: statusColor[a.status || "draft"], fontWeight: 700, marginTop: 6, textTransform: "uppercase" }}>{a.status || "draft"}</div>
             {a.deadline && <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>Deadline: {a.deadline}</div>}
           </div>
-        ))}
-        {filteredRows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13 }}>No assignments in this view yet.</div>}
-      </div>
-      )}
+        );
+
+        if (filteredRows.length === 0) {
+          return <div style={{ color: "#9CA3AF", fontSize: 13 }}>No assignments in this view yet.</div>;
+        }
+
+        if (sourceFilter !== "all") {
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
+              {filteredRows.map(renderCard)}
+            </div>
+          );
+        }
+
+        const shecRows = filteredRows.filter(a => (a.position.kpi_source || "SHEC") === "SHEC");
+        const kietRows = filteredRows.filter(a => (a.position.kpi_source || "SHEC") === "KIET");
+
+        return (
+          <>
+            {shecRows.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+                  SHEC-Mandated Positions ({shecRows.length})
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16, marginBottom: 24 }}>
+                  {shecRows.map(renderCard)}
+                </div>
+              </>
+            )}
+            {kietRows.length > 0 && (
+              <>
+                <div style={{ height: 2, background: "linear-gradient(to right, transparent, #E5E7EB 15%, #E5E7EB 85%, transparent)", marginBottom: 20 }} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+                  KIET-Internal Positions ({kietRows.length})
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
+                  {kietRows.map(renderCard)}
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
       {editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
           <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
@@ -903,6 +941,7 @@ function AdminUsers() {
   const [userForm, setUserForm] = useState({ full_name: "", phone: "", date_of_joining: "" });
   const [settingOverride, setSettingOverride] = useState(null); // assignment id
   const [overrideTo, setOverrideTo] = useState("");
+  const [userSearch, setUserSearch] = useState("");
 
   const loadAll = async () => {
     const [{ data: p }, { data: pos }, { data: camp }, { data: sh }, { data: asn }] = await Promise.all([
@@ -1078,7 +1117,11 @@ function AdminUsers() {
       </div>
 
       <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", overflowX: "auto" }}>
-        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>All Users</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ fontWeight: 700, color: "#1F2937" }}>All Users ({profiles.length})</div>
+          <input value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search by name or phone..."
+            style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", fontSize: 12, width: 240, boxSizing: "border-box" }} />
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
@@ -1086,7 +1129,9 @@ function AdminUsers() {
             </tr>
           </thead>
           <tbody>
-            {profiles.map(p => {
+            {profiles
+              .filter(p => !userSearch || (p.full_name || "").toLowerCase().includes(userSearch.toLowerCase()) || (p.phone || "").includes(userSearch))
+              .map(p => {
               const their = assignments.filter(a => a.user_id === p.id);
               const isEditing = editingUser === p.id;
               return (
