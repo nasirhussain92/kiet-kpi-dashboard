@@ -251,7 +251,7 @@ function UserApp({ profile }) {
   const [view, setView] = useState("kpis"); // kpis | approvals
   const logout = () => supabase.auth.signOut();
 
-  const ASSIGNMENT_SELECT = "id, campus_code, status, submitted_at, approved_at, deadline, sent_date, received_date, correspondence_notes, position:positions(id,name,reports_to_position_id), campuses(name)";
+  const ASSIGNMENT_SELECT = "id, campus_code, status, submitted_at, approved_at, deadline, sent_date, received_date, correspondence_notes, reports_to_assignment_id, position:positions(id,name,reports_to_position_id), campuses(name)";
 
   const loadAssignments = async () => {
     const { data } = await supabase.from("assignments").select(ASSIGNMENT_SELECT).eq("user_id", profile.id);
@@ -261,14 +261,16 @@ function UserApp({ profile }) {
 
   const loadPendingApprovals = async (myAssignments) => {
     // Positions I hold — anyone whose position reports_to one of these, at a matching campus, and is 'submitted'.
-    const myPositionIds = [...new Set(myAssignments.map(a => a.position.id))];
-    if (myPositionIds.length === 0) { setPendingApprovals([]); return; }
+    if (myAssignments.length === 0) { setPendingApprovals([]); return; }
+    const myAssignmentIds = new Set(myAssignments.map(a => a.id));
+    const mine = myAssignments.reduce((acc, a) => { acc[a.position.id] = a.campus_code; return acc; }, {});
     const { data: candidates } = await supabase
       .from("assignments")
-      .select("id, campus_code, status, position:positions(id,name,reports_to_position_id), campuses(name), user:profiles!user_id(full_name)")
+      .select("id, campus_code, status, reports_to_assignment_id, position:positions(id,name,reports_to_position_id), campuses(name), user:profiles!user_id(full_name)")
       .eq("status", "submitted");
-    const mine = myAssignments.reduce((acc, a) => { acc[a.position.id] = a.campus_code; return acc; }, {});
     const relevant = (candidates || []).filter(c => {
+      // Person-to-person override takes priority if set.
+      if (c.reports_to_assignment_id) return myAssignmentIds.has(c.reports_to_assignment_id);
       const parentId = c.position.reports_to_position_id;
       if (!parentId || !(parentId in mine)) return false;
       const myCampus = mine[parentId];
@@ -379,7 +381,7 @@ function KpiEntry({ assignment, isAdmin, onStatusChange }) {
     received_date: assignment.received_date || "", correspondence_notes: assignment.correspondence_notes || "",
   });
 
-  const isFinalAuthority = !assignment.position.reports_to_position_id; // VC — no supervisor, self-approves
+  const isFinalAuthority = !assignment.position.reports_to_position_id && !assignment.reports_to_assignment_id; // no supervisor either way — self-approves
 
   useEffect(() => {
     (async () => {
@@ -400,16 +402,24 @@ function KpiEntry({ assignment, isAdmin, onStatusChange }) {
       (entryRows || []).forEach(e => { map[e.kpi_id] = e; });
       setEntries(map);
 
-      // Can the logged-in user approve this? (holds the position it reports to, matching campus)
-      if (!isAdmin && assignment.position.reports_to_position_id) {
+      // Can the logged-in user approve this? Person-to-person override
+      // takes priority if set, otherwise fall back to whoever holds the
+      // position this one reports to (matching campus).
+      if (!isAdmin) {
         const { data: sess } = await supabase.auth.getSession();
         const uid = sess?.session?.user?.id;
         if (uid) {
-          const { data: mine } = await supabase
-            .from("assignments").select("campus_code")
-            .eq("user_id", uid).eq("position_id", assignment.position.reports_to_position_id);
-          const match = (mine || []).some(m => m.campus_code === assignment.campus_code || m.campus_code === "ALL");
-          setCanApprove(match);
+          if (assignment.reports_to_assignment_id) {
+            const { data: overrideA } = await supabase
+              .from("assignments").select("user_id").eq("id", assignment.reports_to_assignment_id).single();
+            setCanApprove(overrideA?.user_id === uid);
+          } else if (assignment.position.reports_to_position_id) {
+            const { data: mine } = await supabase
+              .from("assignments").select("campus_code")
+              .eq("user_id", uid).eq("position_id", assignment.position.reports_to_position_id);
+            const match = (mine || []).some(m => m.campus_code === assignment.campus_code || m.campus_code === "ALL");
+            setCanApprove(match);
+          }
         }
       }
     })();
@@ -616,7 +626,7 @@ function AdminTracker() {
   const load = async () => {
     const { data } = await supabase
       .from("assignments")
-      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, campuses(name), position:positions(id,name,category,reports_to_position_id,kpi_source), user:profiles!user_id(full_name)")
+      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, reports_to_assignment_id, campuses(name), position:positions(id,name,category,reports_to_position_id,kpi_source), user:profiles!user_id(full_name)")
       .order("id");
     setRows(data || []);
   };
@@ -891,6 +901,8 @@ function AdminUsers() {
   const [reassignTo, setReassignTo] = useState("");
   const [editingUser, setEditingUser] = useState(null);
   const [userForm, setUserForm] = useState({ full_name: "", phone: "", date_of_joining: "" });
+  const [settingOverride, setSettingOverride] = useState(null); // assignment id
+  const [overrideTo, setOverrideTo] = useState("");
 
   const loadAll = async () => {
     const [{ data: p }, { data: pos }, { data: camp }, { data: sh }, { data: asn }] = await Promise.all([
@@ -898,7 +910,7 @@ function AdminUsers() {
       supabase.from("positions").select("*").order("name"),
       supabase.from("campuses").select("*").order("name"),
       supabase.from("shifts").select("*").order("name"),
-      supabase.from("assignments").select("id,user_id,campus_code,shift_id,position:positions(id,name),campuses(name),shifts(name)"),
+      supabase.from("assignments").select("id,user_id,campus_code,shift_id,reports_to_assignment_id,position:positions(id,name),campuses(name),shifts(name)"),
     ]);
     setProfiles(p || []); setPositions(pos || []); setCampuses(camp || []); setShifts(sh || []); setAssignments(asn || []);
   };
@@ -925,6 +937,11 @@ function AdminUsers() {
     if (!reassignTo) return;
     const { error } = await supabase.from("assignments").update({ user_id: reassignTo }).eq("id", id);
     if (!error) { setReassigning(null); setReassignTo(""); loadAll(); }
+  };
+
+  const saveOverride = async (id) => {
+    const { error } = await supabase.from("assignments").update({ reports_to_assignment_id: overrideTo || null }).eq("id", id);
+    if (!error) { setSettingOverride(null); setOverrideTo(""); loadAll(); }
   };
 
   const toggleAdmin = async (id, current) => {
@@ -986,11 +1003,14 @@ function AdminUsers() {
       </div>
 
       <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", overflowX: "auto" }}>
-        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>All Assignments</div>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>All Assignments</div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
+          "Reports To" defaults to whoever holds the parent position (set under Master Data). Use Override here only when a specific case needs to bypass that general rule — e.g. a person reporting directly to a named individual instead of the position.
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
-              {["Position", "Campus", "Shift", "Person", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
+              {["Position", "Campus", "Shift", "Person", "Reports To (override)", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -1010,14 +1030,40 @@ function AdminUsers() {
                   )}
                 </td>
                 <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                  {settingOverride === a.id ? (
+                    <select value={overrideTo} onChange={e => setOverrideTo(e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11, maxWidth: 200 }}>
+                      <option value="">— Use position default —</option>
+                      {assignments.filter(o => o.id !== a.id).map(o => (
+                        <option key={o.id} value={o.id}>
+                          {profiles.find(p => p.id === o.user_id)?.full_name || "Unassigned"} ({o.position.name})
+                        </option>
+                      ))}
+                    </select>
+                  ) : a.reports_to_assignment_id ? (
+                    (() => {
+                      const overrideA = assignments.find(o => o.id === a.reports_to_assignment_id);
+                      const overrideName = overrideA ? (profiles.find(p => p.id === overrideA.user_id)?.full_name || "Unassigned") : "—";
+                      return <span style={{ color: "#7C3AED", fontWeight: 600 }}>{overrideName} (override)</span>;
+                    })()
+                  ) : (
+                    <span style={{ color: "#9CA3AF" }}>Position default</span>
+                  )}
+                </td>
+                <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
                   {reassigning === a.id ? (
                     <>
                       <button onClick={() => saveReassign(a.id)} style={{ fontSize: 11, color: "#059669", background: "none", border: "1px solid #059669", borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Save</button>
                       <button onClick={() => { setReassigning(null); setReassignTo(""); }} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Cancel</button>
                     </>
+                  ) : settingOverride === a.id ? (
+                    <>
+                      <button onClick={() => saveOverride(a.id)} style={{ fontSize: 11, color: "#059669", background: "none", border: "1px solid #059669", borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Save</button>
+                      <button onClick={() => { setSettingOverride(null); setOverrideTo(""); }} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Cancel</button>
+                    </>
                   ) : (
                     <>
                       <button onClick={() => { setReassigning(a.id); setReassignTo(a.user_id || ""); }} style={{ fontSize: 11, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Reassign</button>
+                      <button onClick={() => { setSettingOverride(a.id); setOverrideTo(a.reports_to_assignment_id || ""); }} style={{ fontSize: 11, color: "#7C3AED", background: "none", border: "1px solid #7C3AED", borderRadius: 6, padding: "3px 8px", cursor: "pointer", marginRight: 4 }}>Override</button>
                       <button onClick={() => removeAssignment(a.id)} style={{ fontSize: 11, color: "#DC2626", background: "none", border: "1px solid #DC2626", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                     </>
                   )}
