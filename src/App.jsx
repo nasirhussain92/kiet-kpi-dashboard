@@ -151,9 +151,10 @@ function AuthScreen() {
         if (error) throw error;
         setErr("If that email has an account, a reset link has been sent. Check your inbox.");
       } else if (mode === "signup") {
+        const redirectTo = window.location.origin + import.meta.env.BASE_URL;
         const { error } = await supabase.auth.signUp({
           email, password,
-          options: { data: { full_name: fullName } },
+          options: { data: { full_name: fullName }, emailRedirectTo: redirectTo },
         });
         if (error) throw error;
         setErr("Account created. Log in below. If you don't see your KPIs yet, ask the admin to assign your position.");
