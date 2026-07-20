@@ -16,19 +16,6 @@ const S = {
   green: { label: "Green",       color: "#059669", bg: "#ECFDF5" },
 };
 
-const AVATAR_PALETTE = {
-  a1: "linear-gradient(135deg,#F59E0B,#DC2626)",
-  a2: "linear-gradient(135deg,#003087,#2563EB)",
-  a3: "linear-gradient(135deg,#059669,#10B981)",
-  a4: "linear-gradient(135deg,#7C3AED,#A855F7)",
-  a5: "#9CA3AF",
-};
-function initialsOf(name) {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
-}
-
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet
   const [profile, setProfile] = useState(null);
@@ -232,144 +219,24 @@ function AuthScreen() {
 
 /* ================= SHARED CHROME ================= */
 
-function Sidebar({ items, comingSoonItems = [], activeId, onSelect, brandTitle, brandSubtitle, profile, onOpenProfile, onLogout }) {
+function TopBar({ title, subtitle, onLogout, tabs, tab, setTab }) {
   return (
-    <div className="no-print" style={{ width: 232, background: BLUE, display: "flex", flexDirection: "column", flexShrink: 0, minHeight: "100vh" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 16px", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-        <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 34, borderRadius: 6, background: "white", padding: 2 }} />
+    <div className="no-print" style={{ background: BLUE, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 40, borderRadius: 4, background: "white", padding: 2 }} />
         <div>
-          <div style={{ color: "white", fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>{brandTitle}</div>
-          <div style={{ color: "#93C5FD", fontSize: 10, marginTop: 2 }}>{brandSubtitle}</div>
+          <div style={{ color: "white", fontWeight: 700, fontSize: 18 }}>{title}</div>
+          <div style={{ color: "#93C5FD", fontSize: 11, marginTop: 3 }}>{subtitle}</div>
         </div>
       </div>
-
-      <div style={{ padding: "14px 16px 6px", color: "rgba(255,255,255,0.45)", fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>Workspace</div>
-      {items.map(it => (
-        <div key={it.id} onClick={() => onSelect(it.id)}
-          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", margin: "1px 8px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            background: activeId === it.id ? "white" : "transparent", color: activeId === it.id ? BLUE : "rgba(255,255,255,0.8)" }}>
-          <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{it.icon}</span> {it.label}
-        </div>
-      ))}
-
-      {comingSoonItems.length > 0 && (
-        <>
-          <div style={{ padding: "14px 16px 6px", color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>Coming Soon</div>
-          {comingSoonItems.map(it => (
-            <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", margin: "1px 8px", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.35)", cursor: "default" }}>
-              <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{it.icon}</span> {it.label}
-              <span style={{ marginLeft: "auto", background: "#7C3AED", color: "white", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10 }}>soon</span>
-            </div>
-          ))}
-        </>
-      )}
-
-      <div onClick={onOpenProfile} style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.12)", padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: AVATAR_PALETTE[profile?.avatar_key] || AVATAR_PALETTE.a1, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
-          {initialsOf(profile?.full_name)}
-        </div>
-        <div>
-          <div style={{ color: "white", fontSize: 12, fontWeight: 700 }}>{profile?.full_name}</div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>{activeId === "profile" ? "Editing profile" : "View Profile →"}</div>
-        </div>
-      </div>
-      <div onClick={onLogout} style={{ padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>
-        Log Out
-      </div>
-    </div>
-  );
-}
-
-function AppShell({ nav, activeId, onSelect, brandTitle, brandSubtitle, profile, onOpenProfile, onLogout, pageTitle, children }) {
-  return (
-    <div style={{ minHeight: "100vh", background: "#F3F4F6", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex" }}>
-      <Sidebar
-        items={nav.items} comingSoonItems={nav.comingSoon || []}
-        activeId={activeId} onSelect={onSelect}
-        brandTitle={brandTitle} brandSubtitle={brandSubtitle}
-        profile={profile} onOpenProfile={onOpenProfile} onLogout={onLogout}
-      />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <div className="no-print" style={{ height: 54, background: "white", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", padding: "0 22px", flexShrink: 0 }}>
-          <div style={{ fontWeight: 700, color: "#1F2937", fontSize: 15 }}>{pageTitle}</div>
-        </div>
-        <div style={{ flex: 1, overflow: "auto" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function ProfileScreen({ profile, onUpdated }) {
-  const [form, setForm] = useState({
-    full_name: profile.full_name || "",
-    designation: profile.designation || "",
-    phone: profile.phone || "",
-    secondary_email: profile.secondary_email || "",
-    avatar_key: profile.avatar_key || "a1",
-  });
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const save = async () => {
-    setBusy(true); setMsg("");
-    const { error } = await supabase.from("profiles").update({
-      full_name: form.full_name.trim(),
-      designation: form.designation.trim() || null,
-      phone: form.phone.trim() || null,
-      secondary_email: form.secondary_email.trim() || null,
-      avatar_key: form.avatar_key,
-    }).eq("id", profile.id);
-    setBusy(false);
-    setMsg(error ? error.message : "Profile updated.");
-    if (!error) onUpdated?.({ ...profile, ...form });
-  };
-
-  return (
-    <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 24px 60px" }}>
-      <div style={{ background: "white", borderRadius: 14, padding: 22, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18, flexWrap: "wrap" }}>
-          <div style={{ width: 64, height: 64, borderRadius: "50%", background: AVATAR_PALETTE[form.avatar_key], display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: 22, flexShrink: 0 }}>
-            {initialsOf(form.full_name)}
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: "#1F2937" }}>{form.full_name || "Your name"}</div>
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>Choose an avatar color</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {Object.keys(AVATAR_PALETTE).map(k => (
-                <div key={k} onClick={() => setForm(f => ({ ...f, avatar_key: k }))}
-                  style={{ width: 28, height: 28, borderRadius: "50%", background: AVATAR_PALETTE[k], cursor: "pointer", border: form.avatar_key === k ? `2px solid ${BLUE}` : "2px solid transparent" }} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Full Name</label>
-        <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-          style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 12, boxSizing: "border-box" }} />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
-          <div>
-            <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Designation (your actual title)</label>
-            <input value={form.designation} onChange={e => setForm(f => ({ ...f, designation: e.target.value }))} placeholder="e.g. Assistant Registrar"
-              style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 12, boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Phone</label>
-            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="03xx-xxxxxxx"
-              style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 12, boxSizing: "border-box" }} />
-          </div>
-        </div>
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: -6, marginBottom: 14 }}>
-          This is separate from whatever KPI position an admin has assigned you — they don't have to match.
-        </div>
-
-        <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Secondary Email (optional)</label>
-        <input value={form.secondary_email} onChange={e => setForm(f => ({ ...f, secondary_email: e.target.value }))} placeholder="personal@example.com"
-          style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 16, boxSizing: "border-box" }} />
-
-        {msg && <div style={{ fontSize: 12, color: msg === "Profile updated." ? "#059669" : "#DC2626", marginBottom: 10 }}>{msg}</div>}
-        <button onClick={save} disabled={busy} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-          {busy ? "Saving..." : "Save Changes"}
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {tabs && tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: tab === t.id ? "white" : "rgba(255,255,255,0.15)", color: tab === t.id ? BLUE : "white" }}>
+            {t.label}
+          </button>
+        ))}
+        <button onClick={onLogout} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 12, fontWeight: 600, background: "none", color: "white" }}>
+          Log Out
         </button>
       </div>
     </div>
