@@ -1007,16 +1007,17 @@ function AdminTracker() {
 }
 
 function AdminApprovals() {
-  const [rows, setRows] = useState(null);
+  const [pending, setPending] = useState(null);
+  const [approved, setApproved] = useState([]);
   const [editing, setEditing] = useState(null);
 
+  const SELECT = "id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, reports_to_assignment_id, approved_at, campuses(name), position:positions(id,name,category,reports_to_position_id,kpi_source), user:profiles!user_id(full_name), approver:profiles!approved_by(full_name)";
+
   const load = async () => {
-    const { data } = await supabase
-      .from("assignments")
-      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, reports_to_assignment_id, campuses(name), position:positions(id,name,category,reports_to_position_id,kpi_source), user:profiles!user_id(full_name)")
-      .eq("status", "submitted")
-      .order("id");
-    setRows(data || []);
+    const { data: p } = await supabase.from("assignments").select(SELECT).eq("status", "submitted").order("id");
+    const { data: a } = await supabase.from("assignments").select(SELECT).eq("status", "approved").order("approved_at", { ascending: false }).limit(20);
+    setPending(p || []);
+    setApproved(a || []);
   };
 
   useEffect(() => { load(); }, []);
@@ -1026,16 +1027,16 @@ function AdminApprovals() {
     setEditing(null);
   };
 
-  if (rows === null) return <Loading />;
+  if (pending === null) return <Loading />;
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "20px 24px 60px" }}>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
-        Everything currently in "Submitted" status, across all positions and campuses, waiting on an approval decision.
+        Everything currently in "Submitted" status, across all positions and campuses, waiting on an approval decision. As admin, you can always review and approve (override) regardless of who the actual supervisor is.
       </div>
-      {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", marginTop: 40 }}>Nothing pending approval right now.</div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {rows.map(a => (
+      {pending.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", margin: "20px 0 30px" }}>Nothing pending approval right now.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 30 }}>
+        {pending.map(a => (
           <div key={a.id} style={{ background: "white", borderRadius: 12, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <div>
               <div style={{ fontWeight: 700, color: "#1F2937", fontSize: 14 }}>{a.position.name}</div>
@@ -1046,6 +1047,26 @@ function AdminApprovals() {
           </div>
         ))}
       </div>
+
+      {approved.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Recently Approved</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {approved.map(a => (
+              <div key={a.id} style={{ background: "white", borderRadius: 12, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", opacity: 0.9 }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#1F2937", fontSize: 13 }}>{a.position.name}</div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{a.user?.full_name || "Unassigned"} · {a.campuses?.name || a.campus_code}</div>
+                  <div style={{ fontSize: 11, color: "#059669", marginTop: 2 }}>
+                    Approved by {a.approver?.full_name || "unknown"}{a.approved_at ? ` on ${new Date(a.approved_at).toLocaleDateString()}` : ""}
+                  </div>
+                </div>
+                <button onClick={() => setEditing(a)} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontWeight: 600 }}>View</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
