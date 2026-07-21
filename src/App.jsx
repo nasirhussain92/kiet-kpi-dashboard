@@ -435,7 +435,7 @@ function UserApp({ profile }) {
       const parentId = c.position.reports_to_position_id;
       if (!parentId || !(parentId in mine)) return false;
       const myCampus = mine[parentId];
-      return myCampus === c.campus_code || myCampus === "ALL";
+      return myCampus === c.campus_code || myCampus === "ALL" || c.campus_code === "ALL";
     });
     setPendingApprovals(relevant);
   };
@@ -779,6 +779,7 @@ function AdminApp({ profile }) {
 
   const ADMIN_NAV = [
     { id: "tracker", icon: "📋", label: "Tracker" },
+    { id: "approvals", icon: "✅", label: "Approvals" },
     { id: "users", icon: "👥", label: "Users & Assignments" },
     { id: "master", icon: "🗂️", label: "Master Data" },
     { id: "history", icon: "🕒", label: "History" },
@@ -788,7 +789,7 @@ function AdminApp({ profile }) {
     { id: "notifications", icon: "🔔", label: "Notifications" },
     { id: "bulk", icon: "➕", label: "Bulk Onboarding" },
   ];
-  const PAGE_TITLES = { tracker: "Tracker", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", profile: "My Profile" };
+  const PAGE_TITLES = { tracker: "Tracker", approvals: "Approvals", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", profile: "My Profile" };
 
   return (
     <AppShell
@@ -803,6 +804,7 @@ function AdminApp({ profile }) {
       pageTitle={PAGE_TITLES[tab] || ""}
     >
       {tab === "tracker" ? <AdminTracker />
+        : tab === "approvals" ? <AdminApprovals />
         : tab === "users" ? <AdminUsers />
         : tab === "master" ? <AdminMasterData />
         : tab === "history" ? <AdminHistory />
@@ -986,6 +988,65 @@ function AdminTracker() {
           </>
         );
       })()}
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+          <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
+            <div className="no-print" style={{ background: BLUE, padding: "16px 22px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{editing.position.name}</div>
+                <div style={{ color: "#93C5FD", fontSize: 11 }}>{editing.user?.full_name} · {editing.campuses?.name || editing.campus_code}</div>
+              </div>
+              <button onClick={() => setEditing(null)} style={{ background: "none", border: "none", color: "#93C5FD", fontSize: 24, cursor: "pointer" }}>×</button>
+            </div>
+            <KpiEntry assignment={editing} isAdmin={true} onStatusChange={refresh} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminApprovals() {
+  const [rows, setRows] = useState(null);
+  const [editing, setEditing] = useState(null);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("assignments")
+      .select("id, campus_code, status, deadline, sent_date, received_date, correspondence_notes, reports_to_assignment_id, campuses(name), position:positions(id,name,category,reports_to_position_id,kpi_source), user:profiles!user_id(full_name)")
+      .eq("status", "submitted")
+      .order("id");
+    setRows(data || []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const refresh = async () => {
+    await load();
+    setEditing(null);
+  };
+
+  if (rows === null) return <Loading />;
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "20px 24px 60px" }}>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
+        Everything currently in "Submitted" status, across all positions and campuses, waiting on an approval decision.
+      </div>
+      {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", marginTop: 40 }}>Nothing pending approval right now.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {rows.map(a => (
+          <div key={a.id} style={{ background: "white", borderRadius: 12, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div>
+              <div style={{ fontWeight: 700, color: "#1F2937", fontSize: 14 }}>{a.position.name}</div>
+              <div style={{ fontSize: 12, color: "#9CA3AF" }}>{a.user?.full_name || "Unassigned"} · {a.campuses?.name || a.campus_code}</div>
+              {a.deadline && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Deadline: {a.deadline}</div>}
+            </div>
+            <button onClick={() => setEditing(a)} style={{ fontSize: 12, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>Review</button>
+          </div>
+        ))}
+      </div>
+
       {editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
           <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
