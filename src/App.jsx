@@ -232,55 +232,78 @@ function AuthScreen() {
 
 /* ================= SHARED CHROME ================= */
 
-function Sidebar({ items, comingSoonItems = [], activeId, onSelect, brandTitle, brandSubtitle, profile, onOpenProfile, onLogout }) {
+function Sidebar({ items, comingSoonItems = [], activeId, onSelect, brandTitle, brandSubtitle, profile, onOpenProfile, onLogout, mobileOpen, onClose }) {
   return (
-    <div className="no-print" style={{ width: 232, background: BLUE, display: "flex", flexDirection: "column", flexShrink: 0, minHeight: "100vh" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 16px", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-        <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 34, borderRadius: 6, background: "white", padding: 2 }} />
-        <div>
-          <div style={{ color: "white", fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>{brandTitle}</div>
-          <div style={{ color: "#93C5FD", fontSize: 10, marginTop: 2 }}>{brandSubtitle}</div>
+    <>
+      <style>{`
+        .kiet-sidebar { width: 232px; }
+        .kiet-hamburger { display: none; }
+        .kiet-sidebar-close { display: none; }
+        @media (max-width: 768px) {
+          .kiet-sidebar {
+            position: fixed; top: 0; left: 0; height: 100vh; z-index: 60;
+            transform: translateX(-100%);
+            transition: transform 0.22s ease;
+            box-shadow: 2px 0 16px rgba(0,0,0,0.25);
+          }
+          .kiet-sidebar.kiet-open { transform: translateX(0); }
+          .kiet-hamburger { display: flex; }
+          .kiet-sidebar-close { display: block; }
+        }
+      `}</style>
+      <div className={`no-print kiet-sidebar${mobileOpen ? " kiet-open" : ""}`} style={{ background: BLUE, display: "flex", flexDirection: "column", flexShrink: 0, minHeight: "100vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 16px", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+          <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 34, borderRadius: 6, background: "white", padding: 2 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ color: "white", fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>{brandTitle}</div>
+            <div style={{ color: "#93C5FD", fontSize: 10, marginTop: 2 }}>{brandSubtitle}</div>
+          </div>
+          <div className="kiet-sidebar-close" onClick={onClose} style={{ color: "white", fontSize: 18, cursor: "pointer", padding: "2px 6px" }}>✕</div>
+        </div>
+
+        <div style={{ padding: "14px 16px 6px", color: "rgba(255,255,255,0.45)", fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>Workspace</div>
+        {items.map(it => (
+          <div key={it.id} onClick={() => { onSelect(it.id); onClose?.(); }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", margin: "1px 8px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+              background: activeId === it.id ? "white" : "transparent", color: activeId === it.id ? BLUE : "rgba(255,255,255,0.8)" }}>
+            <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{it.icon}</span> {it.label}
+          </div>
+        ))}
+
+        {comingSoonItems.length > 0 && (
+          <>
+            <div style={{ padding: "14px 16px 6px", color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>Coming Soon</div>
+            {comingSoonItems.map(it => (
+              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", margin: "1px 8px", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.35)", cursor: "default" }}>
+                <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{it.icon}</span> {it.label}
+                <span style={{ marginLeft: "auto", background: "#7C3AED", color: "white", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10 }}>soon</span>
+              </div>
+            ))}
+          </>
+        )}
+
+        <div onClick={() => { onOpenProfile(); onClose?.(); }} style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.12)", padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: AVATAR_PALETTE[profile?.avatar_key] || AVATAR_PALETTE.a1, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
+            {initialsOf(profile?.full_name)}
+          </div>
+          <div>
+            <div style={{ color: "white", fontSize: 12, fontWeight: 700 }}>{profile?.full_name}</div>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>{activeId === "profile" ? "Editing profile" : "View Profile →"}</div>
+          </div>
+        </div>
+        <div onClick={onLogout} style={{ padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>
+          Log Out
         </div>
       </div>
-
-      <div style={{ padding: "14px 16px 6px", color: "rgba(255,255,255,0.45)", fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>Workspace</div>
-      {items.map(it => (
-        <div key={it.id} onClick={() => onSelect(it.id)}
-          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", margin: "1px 8px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            background: activeId === it.id ? "white" : "transparent", color: activeId === it.id ? BLUE : "rgba(255,255,255,0.8)" }}>
-          <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{it.icon}</span> {it.label}
-        </div>
-      ))}
-
-      {comingSoonItems.length > 0 && (
-        <>
-          <div style={{ padding: "14px 16px 6px", color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>Coming Soon</div>
-          {comingSoonItems.map(it => (
-            <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", margin: "1px 8px", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.35)", cursor: "default" }}>
-              <span style={{ fontSize: 15, width: 18, textAlign: "center" }}>{it.icon}</span> {it.label}
-              <span style={{ marginLeft: "auto", background: "#7C3AED", color: "white", fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10 }}>soon</span>
-            </div>
-          ))}
-        </>
+      {mobileOpen && (
+        <div className="no-print" onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 55 }} />
       )}
-
-      <div onClick={onOpenProfile} style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.12)", padding: 12, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: AVATAR_PALETTE[profile?.avatar_key] || AVATAR_PALETTE.a1, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
-          {initialsOf(profile?.full_name)}
-        </div>
-        <div>
-          <div style={{ color: "white", fontSize: 12, fontWeight: 700 }}>{profile?.full_name}</div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>{activeId === "profile" ? "Editing profile" : "View Profile →"}</div>
-        </div>
-      </div>
-      <div onClick={onLogout} style={{ padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "center" }}>
-        Log Out
-      </div>
-    </div>
+    </>
   );
 }
 
 function AppShell({ nav, activeId, onSelect, brandTitle, brandSubtitle, profile, onOpenProfile, onLogout, pageTitle, children }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <div style={{ minHeight: "100vh", background: "#F3F4F6", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex" }}>
       <Sidebar
@@ -288,9 +311,11 @@ function AppShell({ nav, activeId, onSelect, brandTitle, brandSubtitle, profile,
         activeId={activeId} onSelect={onSelect}
         brandTitle={brandTitle} brandSubtitle={brandSubtitle}
         profile={profile} onOpenProfile={onOpenProfile} onLogout={onLogout}
+        mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)}
       />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <div className="no-print" style={{ height: 54, background: "white", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", padding: "0 22px", flexShrink: 0 }}>
+        <div className="no-print" style={{ height: 54, background: "white", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: 12, padding: "0 22px", flexShrink: 0 }}>
+          <div className="kiet-hamburger" onClick={() => setMobileOpen(true)} style={{ alignItems: "center", justifyContent: "center", width: 30, height: 30, cursor: "pointer", fontSize: 18, color: BLUE }}>☰</div>
           <div style={{ fontWeight: 700, color: "#1F2937", fontSize: 15 }}>{pageTitle}</div>
         </div>
         <div style={{ flex: 1, overflow: "auto" }}>{children}</div>
@@ -298,6 +323,7 @@ function AppShell({ nav, activeId, onSelect, brandTitle, brandSubtitle, profile,
     </div>
   );
 }
+
 
 function ProfileScreen({ profile, onUpdated }) {
   const [form, setForm] = useState({
@@ -756,12 +782,13 @@ function AdminApp({ profile }) {
     { id: "users", icon: "👥", label: "Users & Assignments" },
     { id: "master", icon: "🗂️", label: "Master Data" },
     { id: "history", icon: "🕒", label: "History" },
+    { id: "orgchart", icon: "🏛️", label: "Org Chart" },
   ];
   const ADMIN_COMING_SOON = [
     { id: "notifications", icon: "🔔", label: "Notifications" },
     { id: "bulk", icon: "➕", label: "Bulk Onboarding" },
   ];
-  const PAGE_TITLES = { tracker: "Tracker", users: "Users & Assignments", master: "Master Data", history: "History", profile: "My Profile" };
+  const PAGE_TITLES = { tracker: "Tracker", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", profile: "My Profile" };
 
   return (
     <AppShell
@@ -779,9 +806,83 @@ function AdminApp({ profile }) {
         : tab === "users" ? <AdminUsers />
         : tab === "master" ? <AdminMasterData />
         : tab === "history" ? <AdminHistory />
+        : tab === "orgchart" ? <AdminOrgChart />
         : tab === "profile" ? <ProfileScreen profile={profileData} onUpdated={setProfileData} />
         : null}
     </AppShell>
+  );
+}
+
+function AdminOrgChart() {
+  const [positions, setPositions] = useState(null);
+  const [holdersByPosition, setHoldersByPosition] = useState({});
+
+  useEffect(() => {
+    (async () => {
+      const { data: pos } = await supabase.from("positions").select("id, name, reports_to_position_id, kpi_source").order("name");
+      const { data: asg } = await supabase.from("assignments").select("position_id, campus_code, campuses(name), user:profiles!user_id(full_name)");
+      const map = {};
+      (asg || []).forEach(a => {
+        if (!map[a.position_id]) map[a.position_id] = [];
+        map[a.position_id].push({ name: a.user?.full_name || "(unnamed)", campus: a.campuses?.name || a.campus_code });
+      });
+      setPositions(pos || []);
+      setHoldersByPosition(map);
+    })();
+  }, []);
+
+  if (positions === null) return <Loading />;
+
+  const byParent = {};
+  positions.forEach(p => {
+    const key = p.reports_to_position_id || "root";
+    if (!byParent[key]) byParent[key] = [];
+    byParent[key].push(p);
+  });
+  const roots = byParent["root"] || [];
+
+  return (
+    <div style={{ padding: "20px 24px 60px" }}>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
+        Built from each position's "reports to" setting in Master Data. Positions with no reporting line set (including those still undecided) appear as top-level here.
+      </div>
+      <OrgChartNode positions={roots} byParent={byParent} holdersByPosition={holdersByPosition} depth={0} />
+    </div>
+  );
+}
+
+function OrgChartNode({ positions, byParent, holdersByPosition, depth }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {positions.map(p => {
+        const children = byParent[p.id] || [];
+        const holders = holdersByPosition[p.id] || [];
+        return (
+          <div key={p.id}>
+            <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{p.name}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, color: (p.kpi_source || "SHEC") === "SHEC" ? "#1D4ED8" : "#7C3AED", background: (p.kpi_source || "SHEC") === "SHEC" ? "#EFF6FF" : "#F5F3FF" }}>
+                    {p.kpi_source || "SHEC"}
+                  </span>
+                </div>
+                {holders.length > 0 ? (
+                  holders.map((h, i) => <div key={i} style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{h.name} · {h.campus}</div>)
+                ) : (
+                  <div style={{ fontSize: 11, color: "#DC2626", marginTop: 2 }}>Vacant</div>
+                )}
+              </div>
+            </div>
+            {children.length > 0 && (
+              <div style={{ marginLeft: 24, marginTop: 10, paddingLeft: 16, borderLeft: "2px solid #E5E7EB" }}>
+                <OrgChartNode positions={children} byParent={byParent} holdersByPosition={holdersByPosition} depth={depth + 1} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
