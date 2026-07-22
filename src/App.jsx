@@ -192,7 +192,7 @@ function AuthScreen() {
     <div style={{ minHeight: "100vh", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <form onSubmit={submit} style={{ background: "white", borderRadius: 16, padding: 32, width: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
         <div style={{ fontWeight: 700, fontSize: 18, color: BLUE, marginBottom: 4 }}>KIET KPI Dashboard</div>
-        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>SHEC & KIET KPI Compliance — Registrar Office</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>SHEC KPI Compliance — Registrar Office</div>
 
         {mode === "signup" && (
           <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Full name" required
@@ -908,46 +908,80 @@ function AdminOrgChart() {
 
   return (
     <div style={{ padding: "20px 24px 60px" }}>
+      <style>{`
+        .kiet-orgchart { text-align: center; }
+        .kiet-orgchart ul { padding-top: 20px; position: relative; }
+        .kiet-orgchart ul::after { content: ''; display: table; clear: both; }
+        .kiet-orgchart li {
+          float: left; text-align: center;
+          list-style-type: none;
+          position: relative;
+          padding: 20px 10px 0 10px;
+        }
+        .kiet-orgchart li::before, .kiet-orgchart li::after {
+          content: '';
+          position: absolute; top: 0; right: 50%;
+          border-top: 2px solid #CBD5E1;
+          width: 50%; height: 20px;
+        }
+        .kiet-orgchart li::after { right: auto; left: 50%; border-left: 2px solid #CBD5E1; }
+        .kiet-orgchart li:only-child::after, .kiet-orgchart li:only-child::before { display: none; }
+        .kiet-orgchart li:only-child { padding-top: 0; }
+        .kiet-orgchart li:first-child::before, .kiet-orgchart li:last-child::after { border: 0 none; }
+        .kiet-orgchart li:last-child::before { border-right: 2px solid #CBD5E1; border-radius: 0 5px 0 0; }
+        .kiet-orgchart li:first-child::after { border-radius: 5px 0 0 0; }
+        .kiet-orgchart ul ul::before {
+          content: '';
+          position: absolute; top: 0; left: 50%;
+          border-left: 2px solid #CBD5E1;
+          width: 0; height: 20px;
+        }
+        .kiet-orgbox {
+          display: inline-block;
+          border: 1px solid #E5E7EB; border-radius: 10px;
+          padding: 10px 14px; background: white;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          min-width: 160px; text-align: left;
+        }
+      `}</style>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
-        Built from each position's "reports to" setting in Master Data. Positions with no reporting line set (including those still undecided) appear as top-level here.
+        Built from each position's "reports to" setting in Master Data. Positions with no reporting line set (including those still undecided) appear as top-level here. Scroll sideways if the chart is wider than your screen.
       </div>
-      <OrgChartNode positions={roots} byParent={byParent} holdersByPosition={holdersByPosition} depth={0} />
+      <div style={{ overflowX: "auto", paddingBottom: 20 }}>
+        <div className="kiet-orgchart">
+          <ul style={{ display: "inline-block" }}>
+            {roots.map(p => <OrgChartNode key={p.id} position={p} byParent={byParent} holdersByPosition={holdersByPosition} />)}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
 
-function OrgChartNode({ positions, byParent, holdersByPosition, depth }) {
+function OrgChartNode({ position: p, byParent, holdersByPosition }) {
+  const children = byParent[p.id] || [];
+  const holders = holdersByPosition[p.id] || [];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {positions.map(p => {
-        const children = byParent[p.id] || [];
-        const holders = holdersByPosition[p.id] || [];
-        return (
-          <div key={p.id}>
-            <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{p.name}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, color: (p.kpi_source || "SHEC") === "SHEC" ? "#1D4ED8" : "#7C3AED", background: (p.kpi_source || "SHEC") === "SHEC" ? "#EFF6FF" : "#F5F3FF" }}>
-                    {p.kpi_source || "SHEC"}
-                  </span>
-                </div>
-                {holders.length > 0 ? (
-                  holders.map((h, i) => <div key={i} style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{h.name} · {h.campus}</div>)
-                ) : (
-                  <div style={{ fontSize: 11, color: "#DC2626", marginTop: 2 }}>Vacant</div>
-                )}
-              </div>
-            </div>
-            {children.length > 0 && (
-              <div style={{ marginLeft: 24, marginTop: 10, paddingLeft: 16, borderLeft: "2px solid #E5E7EB" }}>
-                <OrgChartNode positions={children} byParent={byParent} holdersByPosition={holdersByPosition} depth={depth + 1} />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <li>
+      <div className="kiet-orgbox">
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{p.name}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, color: (p.kpi_source || "SHEC") === "SHEC" ? "#1D4ED8" : "#7C3AED", background: (p.kpi_source || "SHEC") === "SHEC" ? "#EFF6FF" : "#F5F3FF" }}>
+            {p.kpi_source || "SHEC"}
+          </span>
+        </div>
+        {holders.length > 0 ? (
+          holders.map((h, i) => <div key={i} style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{h.name} · {h.campus}</div>)
+        ) : (
+          <div style={{ fontSize: 11, color: "#DC2626", marginTop: 2 }}>Vacant</div>
+        )}
+      </div>
+      {children.length > 0 && (
+        <ul>
+          {children.map(c => <OrgChartNode key={c.id} position={c} byParent={byParent} holdersByPosition={holdersByPosition} />)}
+        </ul>
+      )}
+    </li>
   );
 }
 
