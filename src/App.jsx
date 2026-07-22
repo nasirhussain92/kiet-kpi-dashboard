@@ -459,11 +459,11 @@ function UserApp({ profile }) {
   const navItems = [
     { id: "kpis", icon: "📊", label: "My KPIs" },
     ...(pendingApprovals.length > 0 ? [{ id: "approvals", icon: "✅", label: `Approvals (${pendingApprovals.length})` }] : []),
+    { id: "notifications", icon: "🔔", label: "Notifications" },
   ];
-  const comingSoon = [{ id: "notifications", icon: "🔔", label: "Notifications" }];
 
   const shellProps = {
-    nav: { items: navItems, comingSoon },
+    nav: { items: navItems },
     activeId: view,
     onSelect: setView,
     brandTitle: "KIET KPI Dashboard",
@@ -477,6 +477,14 @@ function UserApp({ profile }) {
     return (
       <AppShell {...shellProps} pageTitle="My Profile">
         <ProfileScreen profile={profileData} onUpdated={setProfileData} />
+      </AppShell>
+    );
+  }
+
+  if (view === "notifications") {
+    return (
+      <AppShell {...shellProps} pageTitle="Notifications">
+        <NotificationsScreen isAdmin={false} />
       </AppShell>
     );
   }
@@ -784,12 +792,12 @@ function AdminApp({ profile }) {
     { id: "master", icon: "🗂️", label: "Master Data" },
     { id: "history", icon: "🕒", label: "History" },
     { id: "orgchart", icon: "🏛️", label: "Org Chart" },
+    { id: "notifications", icon: "🔔", label: "Notifications" },
   ];
   const ADMIN_COMING_SOON = [
-    { id: "notifications", icon: "🔔", label: "Notifications" },
     { id: "bulk", icon: "➕", label: "Bulk Onboarding" },
   ];
-  const PAGE_TITLES = { tracker: "Tracker", approvals: "Approvals", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", profile: "My Profile" };
+  const PAGE_TITLES = { tracker: "Tracker", approvals: "Approvals", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", notifications: "Notifications", profile: "My Profile" };
 
   return (
     <AppShell
@@ -809,9 +817,64 @@ function AdminApp({ profile }) {
         : tab === "master" ? <AdminMasterData />
         : tab === "history" ? <AdminHistory />
         : tab === "orgchart" ? <AdminOrgChart />
+        : tab === "notifications" ? <NotificationsScreen isAdmin={true} />
         : tab === "profile" ? <ProfileScreen profile={profileData} onUpdated={setProfileData} />
         : null}
     </AppShell>
+  );
+}
+
+function NotificationsScreen({ isAdmin }) {
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("notification_log")
+        .select("id, created_at, notif_type, email_to, status, assignment:assignments(position:positions(name), campus_code, campuses(name)), recipient:profiles!recipient_user_id(full_name)")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      setRows(data || []);
+    })();
+  }, []);
+
+  const TYPE_LABEL = {
+    submitted: { label: "Submission alert", color: "#D97706", bg: "#FFFBEB" },
+    approved: { label: "Approval confirmation", color: "#059669", bg: "#ECFDF5" },
+    deadline_reminder: { label: "Deadline reminder", color: "#DC2626", bg: "#FEF2F2" },
+  };
+
+  if (rows === null) return <Loading />;
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "20px 24px 60px" }}>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
+        {isAdmin
+          ? "Every email notification sent by the system so far — submissions, approvals, and deadline reminders, across all users."
+          : "Email notifications sent to you — submissions awaiting your approval, approval confirmations, and deadline reminders."}
+      </div>
+      {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", marginTop: 40 }}>No notifications sent yet.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.map(r => {
+          const t = TYPE_LABEL[r.notif_type] || { label: r.notif_type, color: "#6B7280", bg: "#F9FAFB" };
+          return (
+            <div key={r.id} style={{ background: "white", borderRadius: 12, padding: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: t.color, background: t.bg, padding: "2px 8px", borderRadius: 10 }}>{t.label}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{r.assignment?.position?.name || "—"}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+                  {isAdmin && r.recipient?.full_name ? `To ${r.recipient.full_name} · ` : ""}
+                  {r.assignment?.campuses?.name || r.assignment?.campus_code} · {r.email_to}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "#9CA3AF" }}>{new Date(r.created_at).toLocaleString()}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
