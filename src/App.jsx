@@ -192,7 +192,7 @@ function AuthScreen() {
     <div style={{ minHeight: "100vh", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <form onSubmit={submit} style={{ background: "white", borderRadius: 16, padding: 32, width: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
         <div style={{ fontWeight: 700, fontSize: 18, color: BLUE, marginBottom: 4 }}>KIET KPI Dashboard</div>
-        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>SHEC KPI Compliance — Registrar Office</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>SHEC & KIET KPI Compliance — Registrar Office</div>
 
         {mode === "signup" && (
           <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Full name" required
