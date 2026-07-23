@@ -1556,12 +1556,14 @@ function AdminUsers() {
                 <td style={{ padding: "8px", fontWeight: 600, color: "#1F2937", whiteSpace: "nowrap" }}>{a.position.name}</td>
                 <td style={{ padding: "8px", color: "#9CA3AF" }}>{a.campuses?.name || a.campus_code}</td>
                 <td style={{ padding: "8px", color: "#9CA3AF" }}>{a.shifts?.name || "—"}</td>
-                <td style={{ padding: "8px", color: "#6B7280" }}>
+                <td style={{ padding: "8px", color: "#6B7280", minWidth: 180 }}>
                   {reassigning === a.id ? (
-                    <select value={reassignTo} onChange={e => setReassignTo(e.target.value)} style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 11 }}>
-                      <option value="">Select new person...</option>
-                      {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      value={reassignTo}
+                      onChange={id => setReassignTo(id)}
+                      options={profiles.map(p => ({ id: p.id, label: p.full_name }))}
+                      placeholder="Select new person..."
+                    />
                   ) : (
                     profiles.find(p => p.id === a.user_id)?.full_name || "Unassigned"
                   )}
