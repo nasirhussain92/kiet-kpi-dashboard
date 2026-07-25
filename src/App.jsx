@@ -31,6 +31,15 @@ function initialsOf(name) {
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+function compareKpiNumbers(a, b) {
+  const partsA = String(a || "0").split(".").map(n => parseInt(n, 10) || 0);
+  const partsB = String(b || "0").split(".").map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const diff = (partsA[i] || 0) - (partsB[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet
@@ -578,7 +587,7 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
 
       const { data: kpiRows } = await supabase
         .from("kpis").select("*").in("area_id", areaIds).order("kpi_number");
-      setKpis(kpiRows || []);
+      setKpis((kpiRows || []).slice().sort((a, b) => compareKpiNumbers(a.kpi_number, b.kpi_number)));
 
       const { data: entryRows } = await supabase
         .from("kpi_entries").select("*").eq("assignment_id", assignment.id);
@@ -736,8 +745,21 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
 
       <style>{`
         @media print {
-          .no-print, .kiet-screen-only { display: none !important; }
-          .kiet-print-report { display: block !important; }
+          body * { visibility: hidden !important; }
+          .kiet-print-report, .kiet-print-report * { visibility: visible !important; }
+          .kiet-print-report {
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important; top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important; padding: 12px !important;
+            max-height: none !important; overflow: visible !important;
+            background: white !important;
+          }
+          .kiet-print-report table { page-break-inside: auto; }
+          .kiet-print-report tr { page-break-inside: avoid; page-break-after: auto; }
+          .kiet-print-report thead { display: table-header-group; }
+          .kiet-print-report .kiet-print-area-title { page-break-after: avoid; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         .kiet-print-report { display: none; }
@@ -849,8 +871,8 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
         </table>
 
         {areas.map(area => (
-          <div key={area.id} style={{ marginBottom: 14, breakInside: "avoid" }}>
-            <div style={{ background: "#003087", color: "white", fontWeight: 700, fontSize: 11, padding: "6px 10px" }}>
+          <div key={area.id} style={{ marginBottom: 14 }}>
+            <div className="kiet-print-area-title" style={{ background: "#003087", color: "white", fontWeight: 700, fontSize: 11, padding: "6px 10px" }}>
               Area {area.area_number}: {area.area_name}
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
