@@ -28,6 +28,9 @@ function initialsOf(name) {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
 }
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = not checked yet
@@ -542,14 +545,14 @@ function UserApp({ profile }) {
           </button>
         </div>
       )}
-      <KpiEntry assignment={selected} onStatusChange={refreshAfterStatusChange} />
+      <KpiEntry assignment={selected} onStatusChange={refreshAfterStatusChange} personName={profileData.full_name} />
     </AppShell>
   );
 }
 
 /* ================= KPI ENTRY (shared by user view + admin edit modal) ================= */
 
-function KpiEntry({ assignment, isAdmin, onStatusChange }) {
+function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameProp }) {
   const [areas, setAreas] = useState(null);
   const [kpis, setKpis] = useState([]);
   const [entries, setEntries] = useState({});
@@ -617,6 +620,37 @@ function KpiEntry({ assignment, isAdmin, onStatusChange }) {
     setSaving(s => ({ ...s, [kpiId]: false }));
   };
 
+  const personName = personNameProp || assignment.user?.full_name || "";
+  const campusLabel = assignment.campuses?.name || assignment.campus_code || "";
+
+  const exportExcel = () => {
+    let rows = "";
+    (areas || []).forEach(area => {
+      rows += `<tr><td colspan="8" style="background:#003087;color:#ffffff;font-weight:bold;padding:6px;">Area ${area.area_number}: ${escapeHtml(area.area_name)}</td></tr>`;
+      rows += `<tr style="background:#F3F4F6;font-weight:bold;"><td>KPI #</td><td>Label</td><td>Baseline</td><td>Year 1</td><td>Year 2</td><td>Year 3</td><td>Benchmark</td><td>Actual</td></tr>`;
+      kpis.filter(k => k.area_id === area.id).forEach(k => {
+        const e = entries[k.id] || {};
+        rows += `<tr><td>${escapeHtml(k.kpi_number)}</td><td>${escapeHtml(k.label)}</td><td>${escapeHtml(e.baseline || "")}</td><td>${escapeHtml(e.yr1_target || "")}</td><td>${escapeHtml(e.yr2_target || "")}</td><td>${escapeHtml(e.yr3_target || "")}</td><td>${escapeHtml(e.benchmark || "")}</td><td>${escapeHtml(e.actual || "")}</td></tr>`;
+      });
+    });
+    const html = `<html><head><meta charset="UTF-8"></head><body>
+      <table border="1">
+        <tr><td colspan="8" style="font-size:16px;font-weight:bold;">KIET KPI Report</td></tr>
+        <tr><td>Position</td><td colspan="7">${escapeHtml(assignment.position.name)}</td></tr>
+        <tr><td>Name</td><td colspan="7">${escapeHtml(personName)}</td></tr>
+        <tr><td>Campus</td><td colspan="7">${escapeHtml(campusLabel)}</td></tr>
+        <tr><td></td></tr>
+        ${rows}
+      </table>
+    </body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `KPI_${assignment.position.name.replace(/[^a-zA-Z0-9]/g, "_")}.xls`;
+    link.click();
+  };
+
+
   const submitForApproval = async () => {
     setWorkflowBusy(true);
     const newStatus = isFinalAuthority ? "approved" : "submitted";
@@ -661,7 +695,8 @@ function KpiEntry({ assignment, isAdmin, onStatusChange }) {
       <div className="no-print" style={{ background: "white", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <span style={{ background: statusBadge.bg, color: statusBadge.color, fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20 }}>{statusBadge.label}</span>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => window.print()} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>🖨️ Print</button>
+          <button onClick={() => window.print()} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>🖨️ Print / Save PDF</button>
+          <button onClick={exportExcel} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>📊 Export Excel</button>
           {!isAdmin && (assignment.status || "draft") === "draft" && (
             <button onClick={submitForApproval} disabled={workflowBusy} style={{ fontSize: 11, color: "white", background: BLUE, border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontWeight: 700 }}>
               {workflowBusy ? "Submitting..." : isFinalAuthority ? "Submit (Final Approval)" : "Submit for Approval"}
@@ -699,6 +734,16 @@ function KpiEntry({ assignment, isAdmin, onStatusChange }) {
         </div>
       )}
 
+      <style>{`
+        @media print {
+          .no-print, .kiet-screen-only { display: none !important; }
+          .kiet-print-report { display: block !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        .kiet-print-report { display: none; }
+      `}</style>
+
+      <div className="kiet-screen-only">
       {areas.length === 0 && (
         <div style={{ background: "white", borderRadius: 12, padding: 20, color: "#9CA3AF", fontSize: 13 }}>
           No KPI areas defined for this position yet.
@@ -769,6 +814,103 @@ function KpiEntry({ assignment, isAdmin, onStatusChange }) {
           </div>
         );
       })}
+      </div>
+
+      <div className="kiet-print-report" style={{ fontFamily: "'Segoe UI',Arial,sans-serif", color: "#111827" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, borderBottom: "3px solid #003087", paddingBottom: 10, marginBottom: 14 }}>
+          <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 54 }} />
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#003087" }}>Karachi Institute of Economics & Technology (KIET)</div>
+            <div style={{ fontSize: 12, color: "#374151" }}>KPI Performance Report</div>
+          </div>
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginBottom: 16 }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", fontWeight: 700, width: "15%", background: "#F3F4F6" }}>Position</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", width: "35%" }}>{assignment.position.name}</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", fontWeight: 700, width: "15%", background: "#F3F4F6" }}>Campus</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", width: "35%" }}>{campusLabel}</td>
+            </tr>
+            <tr>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", fontWeight: 700, background: "#F3F4F6" }}>Name</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px" }}>{personName}</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", fontWeight: 700, background: "#F3F4F6" }}>Status</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px" }}>{statusBadge.label}</td>
+            </tr>
+            <tr>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", fontWeight: 700, background: "#F3F4F6" }}>Submitted</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px" }}>{assignment.submitted_at ? new Date(assignment.submitted_at).toLocaleDateString() : "—"}</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px", fontWeight: 700, background: "#F3F4F6" }}>Approved</td>
+              <td style={{ border: "1px solid #D1D5DB", padding: "5px 8px" }}>{assignment.approved_at ? new Date(assignment.approved_at).toLocaleDateString() : "—"}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {areas.map(area => (
+          <div key={area.id} style={{ marginBottom: 14, breakInside: "avoid" }}>
+            <div style={{ background: "#003087", color: "white", fontWeight: 700, fontSize: 11, padding: "6px 10px" }}>
+              Area {area.area_number}: {area.area_name}
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
+              <thead>
+                <tr style={{ background: "#F3F4F6" }}>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "left", width: "4%" }}>#</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "left", width: "32%" }}>KPI</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "10%" }}>Baseline</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "9%" }}>Year 1</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "9%" }}>Year 2</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "9%" }}>Year 3</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "10%" }}>Benchmark</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "9%" }}>Actual</th>
+                  <th style={{ border: "1px solid #D1D5DB", padding: "4px 6px", width: "8%" }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpis.filter(k => k.area_id === area.id).map(k => {
+                  const e = entries[k.id] || {};
+                  const st = S[e.status || "na"];
+                  return (
+                    <tr key={k.id}>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px" }}>{k.kpi_number}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px" }}>{k.label}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center" }}>{e.baseline || ""}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center" }}>{e.yr1_target || ""}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center" }}>{e.yr2_target || ""}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center" }}>{e.yr3_target || ""}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center" }}>{e.benchmark || ""}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center", fontWeight: 700 }}>{e.actual || ""}</td>
+                      <td style={{ border: "1px solid #D1D5DB", padding: "4px 6px", textAlign: "center", color: st.color, fontWeight: 700 }}>{st.label}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+
+        <div style={{ marginTop: 20, breakInside: "avoid" }}>
+          <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 6 }}>Comments / Remarks</div>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ borderBottom: "1px solid #9CA3AF", height: 20 }} />
+          ))}
+        </div>
+
+        <div style={{ marginTop: 30, display: "flex", justifyContent: "space-between", breakInside: "avoid" }}>
+          {["Prepared by", "Verified by", "Approved by"].map(role => (
+            <div key={role} style={{ width: "30%" }}>
+              <div style={{ borderTop: "1px solid #111827", paddingTop: 6, fontSize: 10, textAlign: "center" }}>
+                {role}<br />Name / Signature / Date
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 24, fontSize: 9, color: "#9CA3AF", textAlign: "center", borderTop: "1px solid #E5E7EB", paddingTop: 6 }}>
+          Generated from the KIET KPI Compliance Dashboard on {new Date().toLocaleDateString()}
+        </div>
+      </div>
     </div>
   );
 }
@@ -831,7 +973,7 @@ function NotificationsScreen({ isAdmin }) {
     (async () => {
       const { data } = await supabase
         .from("notification_log")
-        .select("id, created_at, notif_type, email_to, status, assignment:assignments(position:positions(name), campus_code, campuses(name)), recipient:profiles!recipient_user_id(full_name)")
+        .select("id, created_at, notif_type, email_to, status, channel, assignment:assignments(position:positions(name), campus_code, campuses(name)), recipient:profiles!recipient_user_id(full_name)")
         .order("created_at", { ascending: false })
         .limit(100);
       setRows(data || []);
@@ -843,6 +985,10 @@ function NotificationsScreen({ isAdmin }) {
     approved: { label: "Approval confirmation", color: "#059669", bg: "#ECFDF5" },
     deadline_reminder: { label: "Deadline reminder", color: "#DC2626", bg: "#FEF2F2" },
   };
+  const CHANNEL_LABEL = {
+    email: { label: "Email", color: "#1D4ED8", bg: "#EFF6FF" },
+    whatsapp: { label: "WhatsApp", color: "#059669", bg: "#ECFDF5" },
+  };
 
   if (rows === null) return <Loading />;
 
@@ -850,18 +996,20 @@ function NotificationsScreen({ isAdmin }) {
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "20px 24px 60px" }}>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
         {isAdmin
-          ? "Every email notification sent by the system so far — submissions, approvals, and deadline reminders, across all users."
-          : "Email notifications sent to you — submissions awaiting your approval, approval confirmations, and deadline reminders."}
+          ? "Every notification sent by the system so far (email and WhatsApp) — submissions, approvals, and deadline reminders, across all users."
+          : "Notifications sent to you (email and WhatsApp) — submissions awaiting your approval, approval confirmations, and deadline reminders."}
       </div>
       {rows.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", marginTop: 40 }}>No notifications sent yet.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {rows.map(r => {
           const t = TYPE_LABEL[r.notif_type] || { label: r.notif_type, color: "#6B7280", bg: "#F9FAFB" };
+          const c = CHANNEL_LABEL[r.channel] || { label: r.channel || "email", color: "#6B7280", bg: "#F9FAFB" };
           return (
             <div key={r.id} style={{ background: "white", borderRadius: 12, padding: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: t.color, background: t.bg, padding: "2px 8px", borderRadius: 10 }}>{t.label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: c.color, background: c.bg, padding: "2px 8px", borderRadius: 10 }}>{c.label}</span>
                   <span style={{ fontWeight: 700, fontSize: 13, color: "#1F2937" }}>{r.assignment?.position?.name || "—"}</span>
                 </div>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
