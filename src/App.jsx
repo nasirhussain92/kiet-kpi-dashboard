@@ -633,30 +633,99 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
   const personName = personNameProp || assignment.user?.full_name || "";
   const campusLabel = assignment.campuses?.name || assignment.campus_code || "";
 
-  const exportExcel = () => {
-    let rows = "";
-    (areas || []).forEach(area => {
-      rows += `<tr><td colspan="8" style="background:#003087;color:#ffffff;font-weight:bold;padding:6px;">Area ${area.area_number}: ${escapeHtml(area.area_name)}</td></tr>`;
-      rows += `<tr style="background:#F3F4F6;font-weight:bold;"><td>KPI #</td><td>Label</td><td>Baseline</td><td>Year 1</td><td>Year 2</td><td>Year 3</td><td>Benchmark</td><td>Actual</td></tr>`;
+  const exportExcel = async () => {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("KPI Report");
+
+    ws.columns = [
+      { width: 7 }, { width: 42 }, { width: 12 }, { width: 10 },
+      { width: 10 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 12 },
+    ];
+
+    const thinBorder = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+
+    try {
+      const resp = await fetch(`${import.meta.env.BASE_URL}kiet-logo.jpg`);
+      const buf = await resp.arrayBuffer();
+      const imgId = wb.addImage({ buffer: buf, extension: "jpeg" });
+      ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 90, height: 60 } });
+      for (let i = 1; i <= 4; i++) ws.getRow(i).height = 15;
+    } catch (e) { /* logo optional - continue without it if it can't be fetched */ }
+
+    ws.mergeCells("C1:I1");
+    ws.getCell("C1").value = "Karachi Institute of Economics & Technology (KIET)";
+    ws.getCell("C1").font = { bold: true, size: 14, color: { argb: "FF003087" } };
+    ws.mergeCells("C2:I2");
+    ws.getCell("C2").value = "KPI Performance Report";
+    ws.getCell("C2").font = { size: 11, color: { argb: "FF374151" } };
+
+    let r = 6;
+    [
+      ["Position", assignment.position.name, "Campus", campusLabel],
+      ["Name", personName, "Status", statusBadge.label],
+      ["Submitted", assignment.submitted_at ? new Date(assignment.submitted_at).toLocaleDateString() : "—", "Approved", assignment.approved_at ? new Date(assignment.approved_at).toLocaleDateString() : "—"],
+    ].forEach(([l1, v1, l2, v2]) => {
+      const row = ws.getRow(r);
+      row.getCell(1).value = l1; row.getCell(1).font = { bold: true };
+      row.getCell(2).value = v1;
+      row.getCell(5).value = l2; row.getCell(5).font = { bold: true };
+      row.getCell(6).value = v2;
+      [1, 2, 5, 6].forEach(c => { row.getCell(c).border = thinBorder; row.getCell(c).fill = c === 1 || c === 5 ? { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } } : undefined; });
+      r++;
+    });
+    r += 1;
+
+    areas.forEach(area => {
+      ws.mergeCells(`A${r}:I${r}`);
+      const hc = ws.getCell(`A${r}`);
+      hc.value = `Area ${area.area_number}: ${area.area_name}`;
+      hc.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      hc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF003087" } };
+      r++;
+
+      const headerRow = ws.getRow(r);
+      ["#", "KPI", "Baseline", "Year 1", "Year 2", "Year 3", "Benchmark", "Actual", "Status"].forEach((h, i) => {
+        const c = headerRow.getCell(i + 1);
+        c.value = h; c.font = { bold: true };
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+        c.border = thinBorder;
+      });
+      r++;
+
       kpis.filter(k => k.area_id === area.id).forEach(k => {
         const e = entries[k.id] || {};
-        rows += `<tr><td>${escapeHtml(k.kpi_number)}</td><td>${escapeHtml(k.label)}</td><td>${escapeHtml(e.baseline || "")}</td><td>${escapeHtml(e.yr1_target || "")}</td><td>${escapeHtml(e.yr2_target || "")}</td><td>${escapeHtml(e.yr3_target || "")}</td><td>${escapeHtml(e.benchmark || "")}</td><td>${escapeHtml(e.actual || "")}</td></tr>`;
+        const st = S[e.status || "na"];
+        const row = ws.getRow(r);
+        [k.kpi_number, k.label, e.baseline || "", e.yr1_target || "", e.yr2_target || "", e.yr3_target || "", e.benchmark || "", e.actual || "", st.label].forEach((v, i) => {
+          const cell = row.getCell(i + 1);
+          cell.value = v; cell.border = thinBorder;
+          cell.alignment = { wrapText: true, vertical: "top" };
+          if (i === 8) cell.font = { color: { argb: "FF" + st.color.replace("#", "") }, bold: true };
+        });
+        r++;
       });
+      r += 1;
     });
-    const html = `<html><head><meta charset="UTF-8"></head><body>
-      <table border="1">
-        <tr><td colspan="8" style="font-size:16px;font-weight:bold;">KIET KPI Report</td></tr>
-        <tr><td>Position</td><td colspan="7">${escapeHtml(assignment.position.name)}</td></tr>
-        <tr><td>Name</td><td colspan="7">${escapeHtml(personName)}</td></tr>
-        <tr><td>Campus</td><td colspan="7">${escapeHtml(campusLabel)}</td></tr>
-        <tr><td></td></tr>
-        ${rows}
-      </table>
-    </body></html>`;
-    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
+
+    ws.getCell(`A${r}`).value = "Comments / Remarks";
+    ws.getCell(`A${r}`).font = { bold: true };
+    r += 1;
+    for (let i = 0; i < 3; i++) { ws.getRow(r).getCell(1).border = { bottom: { style: "thin" } }; ws.mergeCells(`A${r}:I${r}`); r++; }
+    r += 1;
+
+    ["Prepared by", "Verified by", "Approved by"].forEach((role, i) => {
+      const col = 1 + i * 3;
+      ws.getCell(r, col).border = { top: { style: "thin" } };
+      ws.getCell(r + 1, col).value = role + " — Name / Signature / Date";
+      ws.getCell(r + 1, col).font = { size: 9, color: { argb: "FF6B7280" } };
+    });
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `KPI_${assignment.position.name.replace(/[^a-zA-Z0-9]/g, "_")}.xls`;
+    link.download = `KPI_${assignment.position.name.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
     link.click();
   };
 
