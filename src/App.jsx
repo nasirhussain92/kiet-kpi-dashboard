@@ -959,15 +959,13 @@ function AdminApp({ profile }) {
     { id: "history", icon: "🕒", label: "History" },
     { id: "orgchart", icon: "🏛️", label: "Org Chart" },
     { id: "notifications", icon: "🔔", label: "Notifications" },
-  ];
-  const ADMIN_COMING_SOON = [
     { id: "bulk", icon: "➕", label: "Bulk Onboarding" },
   ];
-  const PAGE_TITLES = { tracker: "Tracker", approvals: "Approvals", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", notifications: "Notifications", profile: "My Profile" };
+  const PAGE_TITLES = { tracker: "Tracker", approvals: "Approvals", users: "Users & Assignments", master: "Master Data", history: "History", orgchart: "Org Chart", notifications: "Notifications", bulk: "Bulk Onboarding", profile: "My Profile" };
 
   return (
     <AppShell
-      nav={{ items: ADMIN_NAV, comingSoon: ADMIN_COMING_SOON }}
+      nav={{ items: ADMIN_NAV }}
       activeId={tab}
       onSelect={changeTab}
       brandTitle="KIET KPI Dashboard"
@@ -984,6 +982,7 @@ function AdminApp({ profile }) {
         : tab === "history" ? <AdminHistory />
         : tab === "orgchart" ? <AdminOrgChart />
         : tab === "notifications" ? <NotificationsScreen isAdmin={true} />
+        : tab === "bulk" ? <AdminBulkOnboarding />
         : tab === "profile" ? <ProfileScreen profile={profileData} onUpdated={setProfileData} />
         : null}
     </AppShell>
@@ -1355,8 +1354,123 @@ function AdminApprovals() {
   );
 }
 
-/* ================= ANALYTICS ================= */
+function AdminBulkOnboarding() {
+  const [rawText, setRawText] = useState("");
+  const [rows, setRows] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [results, setResults] = useState(null);
 
+  const parseText = (text) => {
+    setRawText(text);
+    const parsed = Papa.parse(text.trim(), { header: false, skipEmptyLines: true });
+    const out = (parsed.data || [])
+      .map(cols => ({ full_name: (cols[0] || "").trim(), email: (cols[1] || "").trim() }))
+      .filter(r => r.email);
+    setRows(out);
+    setResults(null);
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => parseText(String(ev.target.result));
+    reader.readAsText(file);
+  };
+
+  const downloadTemplate = () => {
+    const blob = new Blob(["Full Name,Email\nMuhammad Ali,mali@kiet.edu.pk\n"], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "bulk_onboarding_template.csv";
+    link.click();
+  };
+
+  const sendInvites = async () => {
+    setSending(true);
+    setResults(null);
+    const redirectTo = window.location.origin + import.meta.env.BASE_URL;
+    const BATCH_SIZE = 25;
+    const allResults = [];
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const { data, error } = await supabase.functions.invoke("bulk-invite-users", {
+        body: { rows: batch, redirectTo },
+      });
+      if (error) {
+        batch.forEach(r => allResults.push({ email: r.email, status: "error", detail: error.message }));
+      } else {
+        allResults.push(...(data.results || []));
+      }
+    }
+    setResults(allResults);
+    setSending(false);
+  };
+
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "20px 24px 60px" }}>
+      <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 6 }}>Bulk Onboarding</div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14, lineHeight: 1.5 }}>
+          Paste or upload a two-column list (Full Name, Email) — one person per line. Each person will receive an email
+          with a secure link to set their own password and log in. Positions/assignments are still added separately
+          afterward in Users &amp; Assignments, same as for any self-signed-up user.
+        </div>
+        <button onClick={downloadTemplate} style={{ fontSize: 11, color: BLUE, background: "none", border: `1px solid ${BLUE}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600, marginBottom: 14 }}>
+          Download CSV template
+        </button>
+
+        <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Upload a CSV file</label>
+        <input type="file" accept=".csv,text/csv" onChange={handleFile} style={{ fontSize: 12, marginBottom: 14 }} />
+
+        <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>...or paste directly (Full Name, Email per line)</label>
+        <textarea value={rawText} onChange={e => parseText(e.target.value)} rows={6} placeholder={"Muhammad Ali, mali@kiet.edu.pk\nSara Khan, sara.khan@kiet.edu.pk"}
+          style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 12, boxSizing: "border-box", fontFamily: "monospace" }} />
+
+        {rows.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>{rows.length} people ready to invite</div>
+            <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #F3F4F6", borderRadius: 8 }}>
+              {rows.map((r, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 10px", fontSize: 11, borderBottom: "1px solid #F3F4F6" }}>
+                  <span>{r.full_name || "(no name)"}</span>
+                  <span style={{ color: "#6B7280" }}>{r.email}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={sendInvites} disabled={sending} style={{ marginTop: 12, background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              {sending ? "Sending invites..." : `Send ${rows.length} Invite${rows.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {results && (
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>
+            Results — {results.filter(r => r.status === "invited").length} invited,
+            {" "}{results.filter(r => r.status === "error").length} failed,
+            {" "}{results.filter(r => r.status === "skipped").length} skipped
+          </div>
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            {results.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 11, borderBottom: "1px solid #F3F4F6" }}>
+                <span>{r.email}</span>
+                <span style={{ color: r.status === "invited" ? "#059669" : r.status === "skipped" ? "#D97706" : "#DC2626", fontWeight: 600 }}>
+                  {r.status}{r.detail ? ` — ${r.detail}` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+/* ================= ANALYTICS ================= */
 function AdminAnalytics({ rows, onSelectAssignment }) {
   const [data, setData] = useState(null);
 
