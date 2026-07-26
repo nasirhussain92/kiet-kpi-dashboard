@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Papa from "papaparse";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
 import { supabase } from "./lib/supabaseClient";
@@ -745,12 +746,10 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
 
       <style>{`
         @media print {
-          body * { visibility: hidden !important; }
-          .kiet-print-report, .kiet-print-report * { visibility: visible !important; }
+          body > *:not(.kiet-print-report) { display: none !important; }
           .kiet-print-report {
             display: block !important;
-            position: absolute !important;
-            left: 0 !important; top: 0 !important;
+            position: static !important;
             width: 100% !important;
             margin: 0 !important; padding: 12px !important;
             max-height: none !important; overflow: visible !important;
@@ -838,6 +837,7 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
       })}
       </div>
 
+      {createPortal(
       <div className="kiet-print-report" style={{ fontFamily: "'Segoe UI',Arial,sans-serif", color: "#111827" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, borderBottom: "3px solid #003087", paddingBottom: 10, marginBottom: 14 }}>
           <img src={`${import.meta.env.BASE_URL}kiet-logo.jpg`} alt="KIET" style={{ height: 54 }} />
@@ -932,7 +932,9 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
         <div style={{ marginTop: 24, fontSize: 9, color: "#9CA3AF", textAlign: "center", borderTop: "1px solid #E5E7EB", paddingTop: 6 }}>
           Generated from the KIET KPI Compliance Dashboard on {new Date().toLocaleDateString()}
         </div>
-      </div>
+      </div>,
+      document.body
+      )}
     </div>
   );
 }
