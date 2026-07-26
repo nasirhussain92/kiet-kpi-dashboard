@@ -130,7 +130,7 @@ function ResetPasswordScreen({ onDone }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
-      <div style={{ background: "white", borderRadius: 16, padding: 32, width: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+      <div style={{ background: "white", borderRadius: 16, padding: 32, width: 360, maxWidth: "90vw", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
         <div style={{ fontWeight: 700, fontSize: 18, color: BLUE, marginBottom: 4 }}>Set a New Password</div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>KIET KPI Dashboard</div>
 
@@ -203,7 +203,7 @@ function AuthScreen() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
-      <form onSubmit={submit} style={{ background: "white", borderRadius: 16, padding: 32, width: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+      <form onSubmit={submit} style={{ background: "white", borderRadius: 16, padding: 32, width: 360, maxWidth: "90vw", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
         <div style={{ fontWeight: 700, fontSize: 18, color: BLUE, marginBottom: 4 }}>KIET KPI Dashboard</div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>SHEC KPI Compliance — Registrar Office</div>
 
@@ -386,7 +386,7 @@ function ProfileScreen({ profile, onUpdated }) {
         <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
           style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 12, boxSizing: "border-box" }} />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: "0 14px" }}>
           <div>
             <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Designation (your actual title)</label>
             <input value={form.designation} onChange={e => setForm(f => ({ ...f, designation: e.target.value }))} placeholder="e.g. Assistant Registrar"
@@ -773,7 +773,7 @@ function KpiEntry({ assignment, isAdmin, onStatusChange, personName: personNameP
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 24px 60px" }}>
       <div className="no-print" style={{ background: "white", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <span style={{ background: statusBadge.bg, color: statusBadge.color, fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20 }}>{statusBadge.label}</span>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => window.print()} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>🖨️ Print / Save PDF</button>
           <button onClick={exportExcel} style={{ fontSize: 11, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>📊 Export Excel</button>
           {!isAdmin && (assignment.status || "draft") === "draft" && (
@@ -1326,7 +1326,7 @@ function AdminTracker() {
         );
       })()}
       {editing && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px 8px", overflowY: "auto" }}>
           <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
             <div className="no-print" style={{ background: BLUE, padding: "16px 22px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0 }}>
               <div>
@@ -1406,7 +1406,7 @@ function AdminApprovals() {
       )}
 
       {editing && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px 8px", overflowY: "auto" }}>
           <div style={{ background: "white", borderRadius: 20, width: "100%", maxWidth: 900, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 25px 50px rgba(0,0,0,0.25)" }}>
             <div className="no-print" style={{ background: BLUE, padding: "16px 22px", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0 }}>
               <div>
@@ -1858,7 +1858,7 @@ function AdminUsers() {
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
           The person must have signed up at least once before they appear here. Need a new position, campus, or shift first? Add it under Master Data.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, alignItems: "end" }}>
           <div>
             <label style={{ fontSize: 11, color: "#6B7280", display: "block", marginBottom: 4 }}>Person</label>
             <SearchableSelect
@@ -1899,7 +1899,7 @@ function AdminUsers() {
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
           "Reports To" defaults to whoever holds the parent position (set under Master Data). Use Override here only when a specific case needs to bypass that general rule — e.g. a person reporting directly to a named individual instead of the position.
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
               {["Position", "Campus", "Shift", "Person", "Reports To (override)", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
@@ -1977,7 +1977,7 @@ function AdminUsers() {
           <input value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search by name or phone..."
             style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", fontSize: 12, width: 240, boxSizing: "border-box" }} />
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <table style={{ width: "100%", minWidth: 600, borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
               {["Name", "Phone", "Joined", "Role", "Assignments", "Action"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
@@ -2208,7 +2208,7 @@ function AdminMasterData() {
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "20px 24px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 20 }}>
         <SimpleList title="Departments" table="departments" items={departments} newVal={newDept} setNewVal={setNewDept} placeholder="e.g. Computer Science" editing={editing} setEditing={setEditing} addSimple={addSimple} renameSimple={renameSimple} />
         <SimpleList title="Position Levels" table="position_levels" items={levels} newVal={newLevel} setNewVal={setNewLevel} placeholder="e.g. Deputy Manager" editing={editing} setEditing={setEditing} addSimple={addSimple} renameSimple={renameSimple} />
         <SimpleList title="Shifts" table="shifts" items={shifts} newVal={newShift} setNewVal={setNewShift} placeholder="e.g. Morning" editing={editing} setEditing={setEditing} addSimple={addSimple} renameSimple={renameSimple} />
@@ -2271,7 +2271,7 @@ function AdminMasterData() {
           "Reports to" sets the general org rule for this position (e.g. HoD → Dean). Per-person overrides can be added later if a specific case differs.
           <strong> Source</strong> separates the 15 original SHEC-mandated positions from KIET's own internal staff/faculty positions being added over time.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 0.8fr auto", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginBottom: 16 }}>
           <input value={newPos.name} onChange={e => setNewPos(f => ({ ...f, name: e.target.value }))} placeholder="Position name" style={input} />
           <select value={newPos.levelId} onChange={e => setNewPos(f => ({ ...f, levelId: e.target.value }))} style={input}>
             <option value="">Level...</option>
@@ -2300,7 +2300,8 @@ function AdminMasterData() {
               <div style={{ fontSize: 11, fontWeight: 700, color: source === "SHEC" ? BLUE : "#7C3AED", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, paddingBottom: 6, borderBottom: `2px solid ${source === "SHEC" ? BLUE : "#7C3AED"}` }}>
                 {source === "SHEC" ? "SHEC-Mandated Positions" : "KIET-Internal Positions"} ({group.length})
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid #F3F4F6" }}>
                     {["Position", "Level", "Department", "Reports To", "Source"].map(h => <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#9CA3AF", fontSize: 10 }}>{h}</th>)}
@@ -2341,6 +2342,7 @@ function AdminMasterData() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           );
         })}
